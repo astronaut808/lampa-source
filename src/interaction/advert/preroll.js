@@ -10,6 +10,7 @@ import IMA from './ima'
 import Metric from '../../services/metric'
 import Account from '../../core/account/account'
 import Personal from '../../core/personal'
+import { shouldInitializeBuiltinAds } from '../../custom/advertising_policy'
 
 let running     = 0
 let player_data = {}
@@ -21,6 +22,8 @@ let Manager = new VastManager({
 })
 
 function init(){
+    if(!shouldInitializeBuiltinAds()) return
+
     Manager.init()
 }
 

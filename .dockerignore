@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.DS_Store
+.env
+.env.*
+!.env.example
+build
+dest
+node_modules
+npm-debug.log*
+docs
+*.pem
+*.key
+deploy/secrets

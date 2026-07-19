@@ -1,0 +1,21 @@
+services:
+  lampa:
+    image: "${LAMPA_IMAGE:-ghcr.io/astronaut808/lampa-source}:${LAMPA_TAG:-latest}"
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "${LAMPA_BIND_ADDRESS:-0.0.0.0}:${LAMPA_PORT:-8090}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,mode=0755,uid=101,gid=101
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

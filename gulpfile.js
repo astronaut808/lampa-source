@@ -49,13 +49,13 @@ var docFolder = './build/doc/';
 
 var isDebugEnabled = false;
 
-function merge(done) {
-    let plugins = [babel({
+function merge() {
+    const plugins = [babel({
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env']
     }), commonjs, nodeResolve, worker()]
 
-    rollup({
+    return rollup({
         // Point to the entry file
         input: srcFolder+"app.js",
 
@@ -90,17 +90,15 @@ function merge(done) {
       .pipe(replace(/return kIsNodeJS/g, "return false"))
       // Where to send the output file
       .pipe(dest(dstFolder));
-      
-    done();
 }
 
 function bubbleFile(name){
-    let plug = [babel({
+    const plug = [babel({
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env']
     }), commonjs, nodeResolve]
 
-    rollup({
+    return rollup({
         input: plgFolder+name,
         plugins: plug,
         output: {
@@ -128,16 +126,15 @@ function getFileHash(path) {
     return hashSum.digest('hex');
 }
 
-function plugins(done) {
-    fs.readdirSync(plgFolder).filter(function (file) {
-        return fs.statSync(plgFolder+'/'+file).isDirectory();
-    }).forEach(folder => {
-        bubbleFile(folder+'/'+folder+'.js')
+async function plugins() {
+    const streams = fs.readdirSync(plgFolder)
+        .filter((file) => fs.statSync(plgFolder + '/' + file).isDirectory())
+        .flatMap((folder) => [
+            bubbleFile(folder + '/' + folder + '.js'),
+            plugin_sass(plgFolder + '/' + folder)
+        ])
 
-        plugin_sass(plgFolder+'/'+folder)
-    });
-      
-    done();
+    await Promise.all(streams.map(streamCompleted))
 }
 
 function plugin_sass(plugin_src){
@@ -183,6 +180,51 @@ function build_web(done){
     },500)
 
     done();
+}
+
+function streamCompleted(stream){
+    return new Promise((resolve, reject) => {
+        stream.on('end', resolve)
+        stream.on('error', reject)
+    })
+}
+
+/** Создаёт WEB-сборку один раз и ждёт записи всех файлов. */
+async function build_web_once(){
+    const date = new Date()
+    const full_date = date.getFullYear() + '-' +
+        ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
+        ('0' + date.getDate()).slice(-2) + ' ' +
+        ('0' + date.getHours()).slice(-2) + ':' +
+        ('0' + date.getMinutes()).slice(-2)
+
+    const app = src(dstFolder + 'app.js')
+        .pipe(replace('{__APP_HASH__}', getFileHash(dstFolder + '/app.js')))
+        .pipe(replace('{__APP_BUILD__}', full_date))
+        .pipe(dest(bulFolder + 'web/'))
+
+    const plugin_files = fs.readdirSync(dstFolder)
+        .filter((file) => fs.statSync(dstFolder + '/' + file).isDirectory())
+        .map((folder) => src(dstFolder + folder + '/' + folder + '.js')
+            .pipe(dest(bulFolder + 'web/plugins')))
+
+    await Promise.all([app, ...plugin_files].map(streamCompleted))
+}
+
+async function write_build_info(){
+    const output_directory = bulFolder + 'web/custom'
+    const build_info = {
+        name: 'Astronaut Lampa',
+        revision: process.env.BUILD_REVISION || 'local',
+        builtAt: new Date().toISOString()
+    }
+
+    await fs.promises.mkdir(output_directory, {recursive: true})
+    await fs.promises.writeFile(
+        output_directory + '/build-info.json',
+        JSON.stringify(build_info, null, 2) + '\n',
+        'utf8'
+    )
 }
 
 function write_manifest(done){
@@ -417,6 +459,7 @@ exports.pack_tizen   = series(sync_tizen, uglify_task, public_tizen, index_tizen
 exports.pack_github  = series(sync_github, uglify_task, public_github, write_manifest, index_github);
 exports.pack_plugins = series(plugins);
 exports.test         = series(test);
+exports.build        = series(merge, plugins, sass_task, lang_task, sync_web, build_web_once, write_build_info);
 exports.default = parallel(watch, browser_sync);
 exports.debug = series(enable_debug_mode, this.default)
 exports.doc = series(sync_doc, buildDoc)
