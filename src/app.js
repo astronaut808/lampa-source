@@ -109,6 +109,7 @@ import ContentRows from './core/content_rows'
 import Emit from './utils/emit'
 import Router from './core/router'
 import Timer from './core/timer'
+import StartupMetrics from './utils/startup_metrics'
 
 import ServiceTorserver from './services/torrserver'
 import ServiceWatched from './services/watched'
@@ -362,7 +363,8 @@ function initClass(){
         ContentRows,
         Emit,
         Router,
-        Timer
+        Timer,
+        StartupMetrics
     }
 }
 
