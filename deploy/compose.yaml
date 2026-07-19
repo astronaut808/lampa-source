@@ -1,0 +1,20 @@
+services:
+  lampa:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-local}
+    image: astronaut-lampa:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    ports:
+      - "${LAMPA_BIND_ADDRESS:-0.0.0.0}:${LAMPA_PORT:-8090}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,mode=0755,uid=101,gid=101
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100

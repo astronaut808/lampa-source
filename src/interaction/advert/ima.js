@@ -8,6 +8,7 @@ import Manifest from '../../core/manifest'
 import Account from '../../core/account/account'
 import Personal from '../../core/personal'
 import Metric from '../../services/metric'
+import { canShowBuiltinPreroll } from '../../custom/advertising_policy'
 
 let sdk2_try    = 0
 let sdk3_try    = 0
@@ -120,9 +121,12 @@ function getMediaType(player_data){
 function canShow(player_data){
     let player_type = getMediaType(player_data)
 
-    let ignore = window.lampa_settings.developer.ads ? false : Account.hasPremium() || Personal.confirm()
-
-    return player_type.any ? false : !ignore
+    return canShowBuiltinPreroll({
+        excludedMedia: player_type.any,
+        developerAdsEnabled: window.lampa_settings.developer.ads,
+        hasPremium: Account.hasPremium(),
+        personalConfirmed: Personal.confirm()
+    })
 }
 
 function metric(stat_name, method, ad_name){
