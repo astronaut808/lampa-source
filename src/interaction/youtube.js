@@ -1,5 +1,6 @@
 import Controller from '../core/controller'
 import Screensaver from './screensaver'
+import ServiceLibs from '../services/libs'
 
 let player
 let html
@@ -70,7 +71,11 @@ function update(){
  * @returns {void}
  */
 function play(id){
-    if(typeof YT == 'undefined') return
+    if(typeof YT == 'undefined'){
+        ServiceLibs.load('youtube', ()=>play(id))
+
+        return
+    }
     
     create(id)
 

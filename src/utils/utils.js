@@ -38,6 +38,9 @@ let card_fields = [
     'background_image'
 ]
 
+let qrcode_loading = false
+let qrcode_queue   = []
+
 /**
  * Преобразование секунд в формат времени
  * @doc
@@ -961,6 +964,36 @@ function extendItemsParams(items, params = {}, replace = false){
 }
 
 function qrcode(text, element, error){
+    if(typeof window.qrcode !== 'function'){
+        qrcode_queue.push({text, element, error})
+
+        if(!qrcode_loading){
+            qrcode_loading = true
+
+            let url = window.location.protocol == 'file:' || window.location.href.indexOf('chrome-extension') > -1
+                ? Manifest.github_lampa + 'vender/qrcode/qrcode.js'
+                : './vender/qrcode/qrcode.js'
+
+            putScriptAsync([url], ()=>{
+                let queue = qrcode_queue
+
+                qrcode_loading = false
+                qrcode_queue   = []
+
+                queue.forEach(item=>qrcode(item.text, item.element, item.error))
+            }, ()=>{
+                let queue = qrcode_queue
+
+                qrcode_loading = false
+                qrcode_queue   = []
+
+                queue.forEach(item=>item.error && item.error(new Error('Failed to load QRCode library')))
+            }, false, false)
+        }
+
+        return
+    }
+
     try{
         let qr = window.qrcode(0, 'H')
             qr.addData(text, 'Byte')

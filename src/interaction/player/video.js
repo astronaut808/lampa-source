@@ -19,6 +19,7 @@ import Controller from '../../core/controller'
 import Player from '../player'
 import Segments from './segments'
 import Bell from '../bell'
+import ServiceLibs from '../../services/libs'
 
 let listener = Subscribe()
 let html
@@ -49,6 +50,7 @@ let webos_wait = {}
 let normalization
 let hls_parser
 let render_trigger
+let source_request = 0
 
 let hls_subs_cues         = {}
 let hls_subs_active_track = -1
@@ -1042,7 +1044,9 @@ function loader(status){
  * Устанавливаем ссылку на видео
  * @param {string} src 
  */
- function url(src, change_quality){
+ function url(src, change_quality, library_ready){
+    let request_id = library_ready ? source_request : ++source_request
+
     loader(true)
 
     if(hls){
@@ -1056,6 +1060,32 @@ function loader(status){
     }
 
     if(createTube(src)) return
+
+    if(/\.mpd/.test(src) && typeof window.dashjs === 'undefined'){
+        ServiceLibs.load('dash', ()=>{
+            if(request_id == source_request) url(src, change_quality, true)
+        }, ()=>{
+            if(request_id != source_request) return
+
+            create()
+            load(src)
+        })
+
+        return
+    }
+
+    if(/\.m3u8/.test(src) && typeof window.Hls === 'undefined'){
+        ServiceLibs.load('hls', ()=>{
+            if(request_id == source_request) url(src, change_quality, true)
+        }, ()=>{
+            if(request_id != source_request) return
+
+            create()
+            load(src)
+        })
+
+        return
+    }
 
     create()
 
@@ -1507,6 +1537,8 @@ function removeTube(params) {
  * @param {boolean} type - сохранить с параметрами
  */
 function destroy(savemeta){
+    source_request++
+
     subsview(false)
 
     neeed_sacle = false

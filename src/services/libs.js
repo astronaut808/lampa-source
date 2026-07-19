@@ -1,6 +1,83 @@
 import Utils from '../utils/utils'
 import Manifest from '../core/manifest'
-import Platform from '../core/platform'
+
+let requests = {}
+
+let libraries = {
+    hls: {
+        file: 'hls/hls.js',
+        ready: ()=>typeof window.Hls !== 'undefined'
+    },
+    dash: {
+        file: 'dash/dash.js',
+        ready: ()=>typeof window.dashjs !== 'undefined'
+    },
+    youtube: {
+        url: 'https://www.youtube.com/iframe_api',
+        ready: ()=>typeof window.YT !== 'undefined' && typeof window.YT.Player !== 'undefined'
+    }
+}
+
+function libraryUrl(library){
+    if(library.url) return library.url
+
+    if(window.location.protocol == 'file:' || window.location.href.indexOf('chrome-extension') > -1){
+        return Manifest.github_lampa + 'vender/' + library.file
+    }
+
+    return './vender/' + library.file
+}
+
+/**
+ * Загружает тяжёлую библиотеку при первом обращении и объединяет параллельные запросы.
+ * @param {string} name - hls, dash или youtube
+ * @param {function} complete - вызывается после успешной загрузки
+ * @param {function} error - вызывается при ошибке
+ */
+function load(name, complete, error){
+    let library = libraries[name]
+
+    if(!library) return error && error(new Error('Unknown library: ' + name))
+    if(library.ready()) return complete && complete()
+
+    if(requests[name]){
+        requests[name].push({complete, error})
+        return
+    }
+
+    requests[name] = [{complete, error}]
+
+    let script = document.createElement('script')
+        script.async = true
+        script.src = libraryUrl(library)
+
+    let done = false
+    let timeout = setTimeout(()=>finish(false), 15000)
+
+    let finish = (success)=>{
+        if(done) return
+
+        done = true
+
+        clearTimeout(timeout)
+
+        let listeners = requests[name] || []
+
+        delete requests[name]
+
+        listeners.forEach(listener=>{
+            if(success){
+                if(listener.complete) listener.complete()
+            }
+            else if(listener.error) listener.error(new Error('Failed to load library: ' + name))
+        })
+    }
+
+    script.onload = ()=>finish(library.ready())
+    script.onerror = ()=>finish(false)
+
+    document.body.appendChild(script)
+}
 
 /**
  * Инициализация дополнительных библиотек
@@ -8,17 +85,6 @@ import Platform from '../core/platform'
  */
 function init(){
     let include = []
-
-    // Видео библиотеки
-    include = include.concat(['hls/hls.js', 'dash/dash.js', 'qrcode/qrcode.js'].map(lib=>{
-        return window.location.protocol == 'file:' || window.location.href.indexOf('chrome-extension') > -1 ? Manifest.github_lampa + 'vender/' + lib : './vender/' + lib
-    }))
-
-    // YouTube IFrame API
-    // больше не актуально, так как youtube плеер теперь использует собственный мост для взаимодействия с iframe, и не зависит от глобального объекта YT
-    // if(window.youtube_lazy_load && window.lampa_settings.youtube){
-    //     include.push(Utils.protocol() + 'youtube.com/iframe_api')
-    // }
 
     // Плагины различные
     if(!window.lampa_settings.iptv && window.lampa_settings.services){
@@ -33,5 +99,6 @@ function init(){
 }
 
 export default {
-    init
+    init,
+    load
 }

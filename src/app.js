@@ -364,7 +364,8 @@ function initClass(){
         Emit,
         Router,
         Timer,
-        StartupMetrics
+        StartupMetrics,
+        Libs: ServiceLibs
     }
 }
 
@@ -443,49 +444,19 @@ function prepareApp(){
  * Меню разработчика
  */
 function developerApp(proceed){
-    let expect  = true
-    let pressed = 0
+    Keypad.enable()
 
-    let timer   = setTimeout(()=>{
-        expect  = false
+    Developer.open(()=>{
+        Keypad.disable()
 
         proceed()
-    }, 1000)
-
-    let check = ()=>{
-        pressed++
-
-        if(pressed === 3){
-            clearTimeout(timer)
-
-            expect = false
-
-            Keypad.enable()
-
-            Developer.open(()=>{
-                Keypad.disable()
-
-                proceed()
-            })
-
-            console.log('Developer mode','on')
-        }
-    }
-
-    let keydown = (event)=>{
-        if(expect){
-            if(event.keyCode == 38 || event.keyCode == 29460 || event.keyCode == 50400012) check()
-        }
-        else{
-            document.removeEventListener('keydown', keydown)
-        }
-    }
-
-    $('.welcome').on('click', (e)=>{
-        if(expect && DeviceInput.canClick(e.originalEvent)) check()
     })
 
-    window.addEventListener("keydown", keydown)
+    console.log('Developer mode','on')
+}
+
+function developerModeRequested(){
+    return /(?:^|[?&])developer=1(?:&|$)/.test(window.location.search)
 }
 
 /**
@@ -734,26 +705,23 @@ function startApp(){
  */
 function showApp(){
     LoadingProgress.status('Show app')
-    
-    // Скрытие логотипа
-    setTimeout(()=>{
-        if(window.show_app) return
-
-        window.show_app = true
-
-        LoadingProgress.destroy()
-
-        Keypad.enable()
-
-        Screensaver.enable()
-
-        $('.welcome').fadeOut(500,()=>{
-            $(this).remove()
-        })
-    },1000)
 
     // Старт приложения
     startApp()
+
+    if(window.show_app) return
+
+    window.show_app = true
+
+    LoadingProgress.destroy()
+
+    Keypad.enable()
+
+    Screensaver.enable()
+
+    $('.welcome').fadeOut(500,()=>{
+        $(this).remove()
+    })
 }
 
 /**
@@ -883,8 +851,9 @@ function loadApp(){
 
     // Если язык уже установлен, то запускаем приложение
     if(window.localStorage.getItem('language') || !window.lampa_settings.lang_use){
-        // Но сперва ожидаем не вызвали ли пользователь меню разработчика, затем подгружаем язык
-        developerApp(loadLang)
+        // Меню разработчика доступно только при явном запуске с ?developer=1
+        if(developerModeRequested()) developerApp(loadLang)
+        else loadLang()
     }
     else{
         // Иначе предлагаем выбрать язык
