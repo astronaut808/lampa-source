@@ -1,4 +1,24 @@
 services:
+  metrics:
+    image: "${LAMPA_METRICS_IMAGE:-ghcr.io/astronaut808/lampa-source-metrics}:${LAMPA_TAG:-latest}"
+    pull_policy: always
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - lampa-metrics:/data
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 50
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
   lampa:
     image: "${LAMPA_IMAGE:-ghcr.io/astronaut808/lampa-source}:${LAMPA_TAG:-latest}"
     pull_policy: always
@@ -19,3 +39,6 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+
+volumes:
+  lampa-metrics:

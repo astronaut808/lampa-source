@@ -4,6 +4,7 @@ Workflow `.github/workflows/publish-ghcr.yml` публикует multi-architect
 
 ```text
 ghcr.io/astronaut808/lampa-source
+ghcr.io/astronaut808/lampa-source-metrics
 ```
 
 ## Теги
@@ -12,7 +13,9 @@ ghcr.io/astronaut808/lampa-source
 - Git-тег `custom-v0.1.0`: `custom-v0.1.0` и `sha-<короткий SHA>`;
 - ручной запуск workflow: `sha-<короткий SHA>`.
 
-Образы собираются для `linux/amd64` и `linux/arm64`. Во время Docker build автоматически выполняются тесты и production-сборка.
+Оба образа собираются для `linux/amd64` и `linux/arm64`. Основной образ содержит
+статическую Lampa, а `lampa-source-metrics` — локальный collector метрик запуска.
+Во время Docker build автоматически выполняются тесты и production-сборка.
 
 ## Первый publish
 

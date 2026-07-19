@@ -20,6 +20,7 @@ curl -fsS http://127.0.0.1:8090/healthz
 LAMPA_BIND_ADDRESS=0.0.0.0
 LAMPA_PORT=8090
 LAMPA_IMAGE=ghcr.io/astronaut808/lampa-source
+LAMPA_METRICS_IMAGE=ghcr.io/astronaut808/lampa-source-metrics
 LAMPA_TAG=latest
 ```
 
@@ -46,3 +47,24 @@ curl -fsS http://127.0.0.1:8090/healthz
 Если GHCR package закрытый, сначала выполните `docker login ghcr.io` с GitHub Personal Access Token, имеющим право `read:packages`. Секрет не сохраняйте в `.env`.
 
 HTTPS для LAN-развёртывания Lampa не обязателен. Он понадобится только при публикации сервиса в интернет.
+
+## Метрики запуска
+
+После открытия Lampa телевизор автоматически отправляет обезличенный отчёт в
+локальный collector. Перезапуск контейнера отчёт не создаёт: измеряется именно
+запуск интерфейса на устройстве.
+
+Последний запуск:
+
+```bash
+curl -s http://127.0.0.1:8090/metrics | jq
+```
+
+Последние 20 запусков:
+
+```bash
+curl -s http://127.0.0.1:8090/metrics/history | jq
+```
+
+История хранится в Docker volume `lampa-metrics`. В отчёт не включаются токены,
+email, поисковые запросы или параметры URL.
