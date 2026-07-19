@@ -1,6 +1,7 @@
 import Utils from '../utils/utils'
 import Manifest from '../core/manifest'
 import Platform from '../core/platform'
+import CustomConfig from '../custom/config'
 
 /**
  * Инициализация дополнительных библиотек
@@ -26,8 +27,10 @@ function init(){
         include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/tsarea')
     }
 
-    // Плагин Shots
-    if(window.location.hostname !== 'localhost' && !window.lampa_settings.iptv) include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/shots')
+    // Плагин Shots включается явно через runtime-конфигурацию контейнера
+    if(CustomConfig.shotsEnabled && window.location.hostname !== 'localhost' && !window.lampa_settings.iptv){
+        include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/shots')
+    }
 
     Utils.putScriptAsync(include,()=>{})
 }

@@ -45,6 +45,7 @@ LABEL org.opencontainers.image.title="Astronaut Lampa" \
       org.opencontainers.image.source="https://github.com/astronaut808/lampa-source"
 
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chmod=755 deploy/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
 COPY --from=builder /app/build/web/ /usr/share/nginx/html/
 
 USER 101

@@ -4,8 +4,11 @@ import Platform from '../core/platform'
 import Storage from '../core/storage/storage'
 import Account from '../core/account/account'
 import VPN from '../core/vpn'
+import CustomConfig from '../custom/config'
 
 function init(){
+    if(!CustomConfig.cubTelemetryEnabled) return
+
     let today = new Date()
     let date  = today.toISOString().split('T')[0]
 
@@ -46,6 +49,8 @@ function init(){
 }
 
 function counter(method, v1, v2, v3){
+    if(!CustomConfig.cubTelemetryEnabled) return
+
     $.ajax({
         dataType: 'json',
         url: Utils.protocol() + Manifest.cub_domain + '/api/metric/stat?method='+method+'&value_one=' + (v1 || '') + '&value_two=' + (v2 || '') + '&value_three=' + (v3 || '')
@@ -53,6 +58,8 @@ function counter(method, v1, v2, v3){
 }
 
 function histogram(method, value){
+    if(!CustomConfig.cubTelemetryEnabled) return
+
     $.ajax({
         dataType: 'json',
         url: Utils.protocol() + Manifest.cub_domain + '/api/metric/histogram?method='+method+'&value=' + (value || 0)
