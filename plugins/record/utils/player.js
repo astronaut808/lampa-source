@@ -18,7 +18,6 @@ function Player(station){
 
     function prepare(){
         if(audio.canPlayType('application/vnd.apple.mpegurl') || url.indexOf('.aacp') > 0 || station.stream) load()
-        else if(typeof Hls === 'undefined') Lampa.Libs.load('hls', prepare, load)
         else if (Hls.isSupported()) {
             try{
                 hls = new Hls()
