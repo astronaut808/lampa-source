@@ -1,6 +1,10 @@
+import { shouldInitializeBuiltinAds } from '../custom/advertising_policy'
+
 let status = false
 
 function init(){
+    if(!shouldInitializeBuiltinAds()) return
+
     $.ajax({
         url: "./personal.lampa",
         dataType: 'text',

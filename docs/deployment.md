@@ -22,7 +22,24 @@ LAMPA_PORT=8090
 LAMPA_IMAGE=ghcr.io/astronaut808/lampa-source
 LAMPA_METRICS_IMAGE=ghcr.io/astronaut808/lampa-source-metrics
 LAMPA_TAG=latest
+LAMPA_CUB_TELEMETRY_ENABLED=false
+LAMPA_BUILTIN_ADS_ENABLED=false
+LAMPA_SHOTS_ENABLED=false
 ```
+
+Последние три параметра по умолчанию отключают только встроенную телеметрию
+CUB, встроенную рекламу и дополнительный плагин Shots. Они не отключают аккаунт
+CUB, синхронизацию, плагины, YouTube, HLS, DASH или QRCode. Чтобы временно
+вернуть стандартное поведение, установите нужный параметр в `true` и пересоздайте
+контейнер:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+Текущие значения доступны в локальной сети по адресу `/runtime-config.js`.
+Этот файл публичный, поэтому секреты в переменные `LAMPA_*_ENABLED` добавлять
+нельзя.
 
 `0.0.0.0` открывает Lampa на всех интерфейсах сервера. Ограничьте доступ домашней сетью через firewall и не настраивайте проброс порта на роутере.
 
