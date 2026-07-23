@@ -7,6 +7,13 @@ let callback_cancel,
     loader,
     timer
 
+function notify(type){
+    try{
+        if(window.Lampa && Lampa.Listener) Lampa.Listener.send('astronaut:loading',{type: type})
+    }
+    catch(e){}
+}
+
 /**
  * Отображает слой загрузки с возможностью отмены
  * @param {function} on_cancel - вызывается при отмене загрузки
@@ -14,6 +21,8 @@ let callback_cancel,
  * @returns {void}
  */
 function start(on_cancel, text){
+    notify('start')
+
     callback_cancel = on_cancel
 
     controller_enabled = Controller.enabled().name
@@ -66,6 +75,8 @@ function toggle(){
  * @returns {void}
  */
 function cancel(){
+    notify('cancel')
+
     if(callback_cancel) callback_cancel()
 }
 
@@ -74,6 +85,8 @@ function cancel(){
  * @returns {void}
  */
 function stop(){
+    notify('stop')
+
     if(loader) loader.remove()
 
     clearTimeout(timer)

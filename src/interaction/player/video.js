@@ -230,11 +230,27 @@ function bind(){
     // ждем загрузки
     video.addEventListener("waiting", function (){
         loader(true)
+
+        listener.send('astronaut:waiting', {})
     })
 
     // начали играть
     video.addEventListener("playing", function (){
         loader(false)
+
+        listener.send('astronaut:playing', {})
+    })
+
+    video.addEventListener('loadstart', function() {
+        listener.send('astronaut:loadstart', {})
+    })
+
+    video.addEventListener('loadedmetadata', function() {
+        listener.send('astronaut:loadedmetadata', {})
+    })
+
+    video.addEventListener('stalled', function() {
+        listener.send('astronaut:stalled', {})
     })
 
     // видео закончилось

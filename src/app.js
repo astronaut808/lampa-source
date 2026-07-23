@@ -110,6 +110,7 @@ import Emit from './utils/emit'
 import Router from './core/router'
 import Timer from './core/timer'
 import StartupMetrics from './utils/startup_metrics'
+import PlaybackMetrics from './utils/playback_metrics'
 
 import ServiceTorserver from './services/torrserver'
 import ServiceWatched from './services/watched'
@@ -364,7 +365,8 @@ function initClass(){
         Emit,
         Router,
         Timer,
-        StartupMetrics
+        StartupMetrics,
+        PlaybackMetrics
     }
 }
 
@@ -579,6 +581,9 @@ function startApp(){
 
     Player.init()
     LoadingProgress.status('Player init')
+
+    PlaybackMetrics.init()
+    LoadingProgress.status('PlaybackMetrics init')
 
     Iframe.init()
     LoadingProgress.status('Iframe init')

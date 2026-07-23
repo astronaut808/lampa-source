@@ -7,6 +7,7 @@ const CustomConfig = Object.freeze({
     cubTelemetryEnabled: RuntimeConfig.cubTelemetryEnabled === true,
     builtinAdsEnabled: RuntimeConfig.builtinAdsEnabled === true,
     shotsEnabled: RuntimeConfig.shotsEnabled === true,
+    playbackMetricsEnabled: RuntimeConfig.playbackMetricsEnabled !== false,
     disableBuiltinAds: RuntimeConfig.builtinAdsEnabled !== true
 })
 
