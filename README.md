@@ -4,7 +4,8 @@
 
 Отличия от upstream:
 
-- отключён встроенный preroll Lampa;
+- встроенная реклама, CUB-телеметрия и Shots управляются runtime-флагами и отключены по умолчанию;
+- добавлена локальная диагностика запуска и воспроизведения;
 - CUB-клиент и загрузчик внешних плагинов не изменены;
 - добавлена воспроизводимая production-сборка;
 - добавлен read-only Docker-контейнер с nginx;
@@ -49,6 +50,7 @@ curl -fsS http://127.0.0.1:8090/healthz
 
 - [Локальная разработка](docs/local-development.md)
 - [Архитектура](docs/architecture.md)
+- [Отличия от upstream](docs/customizations.md)
 - [Публикация в GHCR](docs/container-registry.md)
 - [Развёртывание в LAN](docs/deployment.md)
 - [Установка на Hisense через VidaaEdge](docs/hisense-installation.md)
