@@ -22,6 +22,16 @@ describe('playback diagnostics', ()=>{
         expect(loading).toContain("Lampa.Listener.send('astronaut:loading'")
     })
 
+    it('keeps Lampa 3.3 media loading and modular player contracts', ()=>{
+        expect(loading).toContain('function start(on_cancel, text, options = {})')
+        expect(loading).toContain('media_loader = MediaLoading.create()')
+        expect(loading).toContain('setProgress')
+        expect(video).toContain("import HlsStream from './video/hls'")
+        expect(video).toContain("import DashStream from './video/dash'")
+        expect(video).toContain('registerTube: Tube.register')
+        expect(video).toContain("listener.send('astronaut:playing'")
+    })
+
     it('exposes same-origin playback collection endpoints', ()=>{
         expect(nginx).toContain('location = /metrics/playback {')
         expect(nginx).toContain('location = /metrics/playback/history {')

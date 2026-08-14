@@ -256,7 +256,9 @@ function parseSubs(path, files){
 }
 
 function preload(data, run){
-    let need_preload = Torserver.ip() && data.url.indexOf(Torserver.ip()) > -1 && data.url.indexOf('&preload') > -1
+    let has_server = Torserver.ip() && data.url.indexOf(Torserver.ip()) > -1
+    let has_preload = data.url.indexOf('&preload') > -1
+    let need_preload = has_server && has_preload
 
     if(need_preload){
         let checkout
@@ -269,7 +271,7 @@ function preload(data, run){
             network.clear()
 
             Loading.stop()
-        })
+        }, '', {media: data})
 
         let update = ()=>{    
             network.timeout(2000)
@@ -277,7 +279,9 @@ function preload(data, run){
             network.silent(first ? data.url : data.url.replace('&preload', '&stat'), function (res) {
                 let pb = res.preloaded_bytes || 0,
                     ps = res.preload_size || 0,
-                    sp = res.download_speed ? Utils.bytesToSize(res.download_speed * 8, true) : '0.0'
+                    sp = res.download_speed ? Utils.bytesToSize(res.download_speed * 8, true) : '0.0',
+                    active_peers = parseInt(res.active_peers || 0),
+                    total_peers = parseInt(res.total_peers || 0)
                 
                 let progress = Math.min(100,((pb * 100) / ps ))
 
@@ -289,7 +293,11 @@ function preload(data, run){
                     run()
                 }
                 else{
-                    Loading.setText(Math.round(progress) + '%' + ' - ' + sp)
+                    Loading.setProgress(progress, {
+                        speed: sp,
+                        active_peers: active_peers,
+                        total_peers: total_peers
+                    })
                 }
             })
 
@@ -330,6 +338,7 @@ function list(items, params){
             episode: info.episode,
             title: element.path_human,
             first_title:  params.movie.name || params.movie.title,
+            card: params.movie,
             size: Utils.bytesToSize(element.length),
             url: Torserver.stream(element.path, SERVER.hash, element.id),
             torrent_hash: SERVER.hash,
@@ -402,25 +411,23 @@ function list(items, params){
         element.subtitles = parseSubs(element.path, params.files)
 
         element.title = (element.fname || element.title).replace(/<[^>]*>?/gm, '')
+        element.subtitle = element.episode ? Lang.translate('torrent_serial_episode') + ': ' + element.episode : ''
+
+        // копируем объект, чтобы не было ссылок на один и тот же объект в плейлисте
+        let playlist_element = {}
+
+        for(let a in element){
+            playlist_element[a] = element[a]
+        }
+
+        playlist.push(playlist_element)
 
         element.playlist = playlist
 
-        playlist.push({
-            title: element.title,
-            subtitle: element.episode ? Lang.translate('torrent_serial_episode') + ': ' + element.episode : '',
-            url: element.url,
-            season: element.season,
-            episode: element.episode,
-            path: element.path,
-            timeline: element.timeline,
-            thumbnail: element.thumbnail,
-            subtitles: element.subtitles
-        })
-        
         item.on('hover:enter',()=>{
             stopAutostart()
 
-            //если это андроид, но не андроид, то нефиг смотреть
+            // если это андроид, но не андроид, то нефиг смотреть
             if(navigator.userAgent.toLowerCase().indexOf('android') >= 0 && !Platform.is('android')) return Platform.install('apk')
 
             if(params.movie.id) Favorite.add('history', params.movie, 100)
