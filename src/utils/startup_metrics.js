@@ -2,6 +2,8 @@ import Manifest from '../core/manifest'
 
 let marks = []
 let finished = false
+let catalogFinished = false
+let attemptId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 
 function now(){
     if(window.performance && typeof window.performance.now == 'function') return window.performance.now()
@@ -133,6 +135,7 @@ function snapshot(){
 
     return {
         schema_version: 1,
+        attempt_id: attemptId,
         captured_at: new Date().toISOString(),
         app: {
             name: 'Astronaut Lampa',
@@ -147,7 +150,8 @@ function snapshot(){
         },
         totals: {
             app_ready_ms: ready ? ready.at_ms : null,
-            ui_visible_ms: visible ? visible.at_ms : null
+            ui_visible_ms: visible ? visible.at_ms : null,
+            catalog_ready_ms: find('Catalog ready')?.at_ms || null
         },
         critical_path: {
             cache_ms: span('Open cache database', 'Storage load reserve'),
@@ -156,7 +160,8 @@ function snapshot(){
             plugins_init_ms: span('Plugins initialization', 'Proxy initialization'),
             proxy_ms: span('Proxy initialization', 'Account initialization'),
             account_ms: span('Account initialization', 'Loading plugins'),
-            plugins_load_ms: span('Loading plugins', 'Show app')
+            plugins_load_ms: span('Loading plugins', 'Show app'),
+            ui_to_catalog_ms: span('UI visible', 'Catalog ready')
         },
         features: {
             cub_signed_in: account.signed_in,
@@ -213,15 +218,23 @@ function finish(){
 
     mark('UI visible')
 
-    let report = snapshot()
-
     finished = true
 
-    setTimeout(()=>send(report), 250)
+    setTimeout(()=>send(snapshot()), 250)
+}
+
+function catalogReady(){
+    if(catalogFinished) return
+
+    catalogFinished = true
+    marks.push({name: 'Catalog ready', at_ms: round(now())})
+
+    if(finished) setTimeout(()=>send(snapshot()), 0)
 }
 
 export default {
     mark,
     finish,
+    catalogReady,
     snapshot
 }

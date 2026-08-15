@@ -13,6 +13,7 @@ import Template from '../../../interaction/template'
 import LineModule from '../../../interaction/items/line/module/module'
 import ContentRows from '../../content_rows'
 import Permit from '../../account/permit'
+import CustomConfig from '../../../custom/config'
 import VPN from '../../../core/vpn'
 import Keys from '../../tmdb/keys'
 
@@ -81,7 +82,7 @@ function list(params = {}, oncomplite, onerror){
 }
 
 function main(params = {}, oncomplite, onerror){
-    let parts_limit = 6
+    let parts_limit = CustomConfig.fastStartupEnabled ? 3 : 6
     let parts_data  = [
         (call)=>{
             get('?sort=now_playing',params,(json)=>{
@@ -458,9 +459,24 @@ function category(params = {}, oncomplite, onerror){
     return loadPart
 }
 
-function full(params, oncomplite, onerror){
-    let status = new Status(9)
-        status.onComplite = oncomplite
+function full(params, oncomplite, onerror, onupdate){
+    let progressive = CustomConfig.progressiveCardEnabled && typeof onupdate == 'function'
+    let status = new Status(progressive ? 8 : 9)
+    let completed = false
+
+    status.onComplite = (data)=>{
+        completed = true
+
+        oncomplite(data)
+    }
+
+    let appendOptional = (name, data)=>{
+        if(!progressive) return status.append(name, data)
+
+        status.data[name] = data
+
+        if(completed) onupdate(name, data)
+    }
 
     if(Utils.dcma(params.method, params.id)) return onerror()
 
@@ -535,22 +551,22 @@ function full(params, oncomplite, onerror){
     }
 
     reactionsGet(params, (json)=>{
-        status.append('reactions', json)
+        appendOptional('reactions', json)
     })
 
     if(Lang.selected(['ru','uk','be']) && window.lampa_settings.account_use && !Permit.child){
-        status.need++
+        if(!progressive) status.need++
 
         discussGet(params, (json)=>{
-            status.append('discuss', json)
-        },status.error.bind(status))
+            appendOptional('discuss', json)
+        },progressive ? ()=>{} : status.error.bind(status))
     }
 
     if(params.method == 'movie'){
-        status.need++
+        if(!progressive) status.need++
 
         metadataGet(params, (json)=>{
-            status.append('metadata', json)
+            appendOptional('metadata', json)
         },status.error.bind(status))
     }
 }

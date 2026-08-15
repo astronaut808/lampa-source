@@ -343,8 +343,20 @@ function normalizeNetworkBatch(report){
 }
 
 function storeStartup(report){
-    report.received_at = new Date().toISOString()
-    startupHistory.push(report)
+    let now = new Date().toISOString()
+    let index = report.attempt_id ? startupHistory.findIndex(item=>item.attempt_id === report.attempt_id) : -1
+
+    if(index >= 0){
+        report.received_at = startupHistory[index].received_at
+        report.updated_at = now
+        startupHistory[index] = report
+    }
+    else{
+        report.received_at = now
+        report.updated_at = now
+        startupHistory.push(report)
+    }
+
     startupHistory = startupHistory.slice(-STARTUP_HISTORY_LIMIT)
     persistStartup()
 

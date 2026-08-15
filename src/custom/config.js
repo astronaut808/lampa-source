@@ -10,6 +10,8 @@ const CustomConfig = Object.freeze({
     playbackMetricsEnabled: RuntimeConfig.playbackMetricsEnabled !== false,
     cardMetricsEnabled: RuntimeConfig.cardMetricsEnabled !== false,
     networkMetricsEnabled: RuntimeConfig.networkMetricsEnabled !== false,
+    progressiveCardEnabled: RuntimeConfig.progressiveCardEnabled !== false,
+    fastStartupEnabled: RuntimeConfig.fastStartupEnabled !== false,
     disableBuiltinAds: RuntimeConfig.builtinAdsEnabled !== true
 })
 

@@ -114,6 +114,7 @@ import StartupMetrics from './utils/startup_metrics'
 import PlaybackMetrics from './utils/playback_metrics'
 import CardMetrics from './utils/card_metrics'
 import NetworkMetrics from './utils/network_metrics'
+import CustomConfig from './custom/config'
 
 import ServiceTorserver from './services/torrserver'
 import ServiceWatched from './services/watched'
@@ -751,9 +752,8 @@ function startApp(){
  */
 function showApp(){
     LoadingProgress.status('Show app')
-    
-    // Скрытие логотипа
-    setTimeout(()=>{
+
+    let reveal = ()=>{
         if(window.show_app) return
 
         window.show_app = true
@@ -764,13 +764,18 @@ function showApp(){
 
         Screensaver.enable()
 
-        $('.welcome').fadeOut(500,()=>{
+        if(CustomConfig.fastStartupEnabled) $('.welcome').remove()
+        else $('.welcome').fadeOut(500,()=>{
             $(this).remove()
         })
-    },1000)
+    }
 
     // Старт приложения
     startApp()
+
+    // Скрытие логотипа после синхронной инициализации интерфейса
+    if(CustomConfig.fastStartupEnabled) reveal()
+    else setTimeout(reveal, 1000)
 }
 
 /**
@@ -901,7 +906,8 @@ function loadApp(){
     // Если язык уже установлен, то запускаем приложение
     if(window.localStorage.getItem('language') || !window.lampa_settings.lang_use){
         // Но сперва ожидаем не вызвали ли пользователь меню разработчика, затем подгружаем язык
-        developerApp(loadLang)
+        if(CustomConfig.fastStartupEnabled) loadLang()
+        else developerApp(loadLang)
     }
     else{
         // Иначе предлагаем выбрать язык

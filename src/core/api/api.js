@@ -77,8 +77,8 @@ function category(params = {}, oncomplite, onerror){
  * @param {function} oncomplite 
  * @param {function} onerror 
  */
-function full(params = {}, oncomplite, onerror){
-    source(params).full(params, oncomplite, onerror)
+function full(params = {}, oncomplite, onerror, onupdate){
+    source(params).full(params, oncomplite, onerror, onupdate)
 }
 
 /**

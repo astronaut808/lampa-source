@@ -17,6 +17,8 @@ shots_enabled="$(as_boolean "${LAMPA_SHOTS_ENABLED:-false}")"
 playback_metrics_enabled="$(as_boolean "${LAMPA_PLAYBACK_METRICS_ENABLED:-true}")"
 card_metrics_enabled="$(as_boolean "${LAMPA_CARD_METRICS_ENABLED:-true}")"
 network_metrics_enabled="$(as_boolean "${LAMPA_NETWORK_METRICS_ENABLED:-true}")"
+progressive_card_enabled="$(as_boolean "${LAMPA_PROGRESSIVE_CARD_ENABLED:-true}")"
+fast_startup_enabled="$(as_boolean "${LAMPA_FAST_STARTUP_ENABLED:-true}")"
 
 {
     printf 'window.LampaRuntimeConfig = Object.freeze({\n'
@@ -25,6 +27,8 @@ network_metrics_enabled="$(as_boolean "${LAMPA_NETWORK_METRICS_ENABLED:-true}")"
     printf '    shotsEnabled: %s,\n' "$shots_enabled"
     printf '    playbackMetricsEnabled: %s,\n' "$playback_metrics_enabled"
     printf '    cardMetricsEnabled: %s,\n' "$card_metrics_enabled"
-    printf '    networkMetricsEnabled: %s\n' "$network_metrics_enabled"
+    printf '    networkMetricsEnabled: %s,\n' "$network_metrics_enabled"
+    printf '    progressiveCardEnabled: %s,\n' "$progressive_card_enabled"
+    printf '    fastStartupEnabled: %s\n' "$fast_startup_enabled"
     printf '})\n'
 } > "$runtime_config_path"

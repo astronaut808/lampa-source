@@ -52,6 +52,84 @@ function component(object){
             this.tv   = Platform.screen('tv')
             this.view = 3
             this.rows = ['start', 'description']
+            this.card_ready = false
+            this.card_destroyed = false
+
+            let card_data = null
+            let allow_discuss = false
+            let enrichment_rows = {
+                discuss: false,
+                metadata: false
+            }
+
+            let appendRows = (rows)=>{
+                rows.forEach(row=>this.rows.push(row))
+
+                if(!this.card_ready || this.card_destroyed) return
+
+                this.fragment = document.createDocumentFragment()
+
+                rows.forEach(this.emit.bind(this, 'createAndAppend'))
+
+                this.scroll.append(this.fragment)
+
+                Layer.visible(this.scroll.render())
+            }
+
+            let metadataRows = (metadata)=>{
+                if(enrichment_rows.metadata || !metadata || metadata.status != 'completed') return []
+
+                enrichment_rows.metadata = true
+
+                let rows = [['metadata_chart', {
+                    movie: card_data.movie,
+                    metadata
+                }]]
+
+                if(Lang.selected(['ru','uk','be'])) rows.push(['metadata_tags', {
+                    movie: card_data.movie,
+                    metadata
+                }])
+
+                return rows
+            }
+
+            let discussRows = (discuss)=>{
+                if(enrichment_rows.discuss || !allow_discuss || !discuss) return []
+
+                enrichment_rows.discuss = true
+
+                return [['discuss', {
+                    ...discuss,
+                    movie: card_data.movie,
+                    title: Lang.translate('title_comments'),
+                    results: discuss.result || []
+                }]]
+            }
+
+            let enrich = (name, data)=>{
+                if(!this.card_ready || this.card_destroyed || !card_data) return
+
+                card_data[name] = data
+                this.props.set(name, data)
+
+                if(name == 'reactions' && this.items.length){
+                    this.items[0].emit('enrichment', {name, data})
+                    this.items[0].emit('groupButtons')
+                }
+                else if(name == 'metadata') appendRows(metadataRows(data))
+                else if(name == 'discuss') appendRows(discussRows(data))
+
+                Lampa.Listener.send('full', {
+                    link: this,
+                    type: 'enrichment',
+                    name,
+                    props: this.props,
+                    body: $(this.html),
+                    object,
+                    data: card_data
+                })
+            }
 
             let fail = (error)=>{
                 let status = error || {}
@@ -69,6 +147,8 @@ function component(object){
 
             Api.full(object, (data)=>{
                 if(!data.movie) return fail({empty: true})
+
+                card_data = data
 
                 // Добавляем в пропсы данные
                 this.props.set(data)
@@ -104,6 +184,8 @@ function component(object){
                 // Если фильм помечен как для взрослых, то добавляем это в данные фильма
                 if(adult_block) data.movie.adult = true
 
+                allow_discuss = !adult_block
+
                 // Отправляем событие, что началась загрузка полной карточки
                 if(watch) Lampa.Listener.send('full', {
                     link: this,
@@ -114,19 +196,7 @@ function component(object){
                     data
                 })
 
-                if(data.metadata && data.metadata && data.metadata.status && data.metadata.status == 'completed'){
-                    this.rows.push(['metadata_chart', {
-                        movie: data.movie,
-                        metadata: data.metadata
-                    }])
-
-                    if(Lang.selected(['ru','uk','be'])){
-                        this.rows.push(['metadata_tags', {
-                            movie: data.movie,
-                            metadata: data.metadata
-                        }])
-                    }
-                }
+                appendRows(metadataRows(data.metadata))
 
                 // Создаем эпизоды
                 if(!adult_block && data.episodes && data.episodes.episodes) {
@@ -180,12 +250,16 @@ function component(object){
                 }])
 
                 // Создаем отзывы
-                if(!adult_block && data.discuss) Arrays.insert(this.rows, data.discuss.result.length ? 2 : this.rows.length, ['discuss', {
+                if(!adult_block && data.discuss){
+                    enrichment_rows.discuss = true
+
+                    Arrays.insert(this.rows, data.discuss.result && data.discuss.result.length ? 2 : this.rows.length, ['discuss', {
                     ...data.discuss,
                     movie: data.movie,
                     title: Lang.translate('title_comments'),
                     results: data.discuss.result || []
-                }])
+                    }])
+                }
 
                 // Создаем коллекцию
                 if(!adult_block && data.collection && data.collection.results && data.collection.results.length){
@@ -221,6 +295,7 @@ function component(object){
 
                 // Создаем все компоненты
                 this.build(this.rows.slice(0, this.view))
+                this.card_ready = true
 
                 // Обновляем расписание
                 Timetable.update(data.movie)
@@ -242,7 +317,7 @@ function component(object){
 
                 this.activity.toggle()
 
-            }, fail)
+            }, fail, enrich)
         },
         onBuild: function(){
             this.scroll.onScroll = this.emit.bind(this, 'scroll')
@@ -252,6 +327,9 @@ function component(object){
         },
         onStart: function(){
             this.props.get('movie') && Background.immediately(Utils.cardImgBackgroundBlur(this.props.get('movie')))
+        },
+        onDestroy: function(){
+            this.card_destroyed = true
         },
         onScroll: function(position){
             let size = this.tv ? Math.min(this.active + this.view, this.rows.length) : this.rows.length

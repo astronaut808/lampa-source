@@ -3,6 +3,7 @@ import Main from '../interaction/items/main'
 import Background from '../interaction/background'
 import Utils from '../utils/utils'
 import Router from '../core/router'
+import StartupMetrics from '../utils/startup_metrics'
 
 /**
  * Компонент главной страницы
@@ -15,7 +16,12 @@ function component(object){
 
     comp.use({
         onCreate: function(){
-            let nextCall = Api.main(object, this.build.bind(this), this.empty.bind(this))
+            let ready = (data)=>{
+                this.build(data)
+
+                StartupMetrics.catalogReady()
+            }
+            let nextCall = Api.main(object, ready, this.empty.bind(this))
 
             if(typeof nextCall == 'function') next = nextCall
         },

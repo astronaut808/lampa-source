@@ -26,9 +26,21 @@ describe('card diagnostics', ()=>{
         expect(client).toContain("Lampa.Listener.follow('activity'")
         expect(client).toContain("Lampa.Listener.follow('full'")
         expect(client).toContain("Lampa.Listener.follow('request_before'")
-        expect(client).toContain('SLOW_CARD_THRESHOLD = 15000')
+        expect(client).toContain('SLOW_CARD_THRESHOLD = 2000')
         expect(client).not.toContain('window.fetch =')
         expect(client).not.toContain('XMLHttpRequest.prototype')
+    })
+
+    it('renders the card before optional CUB enrichment completes', ()=>{
+        expect(tmdb).toContain('progressive ? 8 : 9')
+        expect(cub).toContain('progressive ? 8 : 9')
+        expect(tmdb).toContain("appendOptional('reactions'")
+        expect(tmdb).toContain("appendOptional('discuss'")
+        expect(tmdb).toContain("appendOptional('metadata'")
+        expect(full).toContain("type: 'enrichment'")
+        expect(full).toContain("this.items[0].emit('enrichment'")
+        expect(client).toContain('let recent = []')
+        expect(client).toContain('report(current, current.outcome)')
     })
 
     it('exposes same-origin card endpoints', ()=>{

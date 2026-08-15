@@ -10,7 +10,8 @@ export default {
     onCreate: function(){
         if(!Storage.field('card_interfice_reactions') || window.lampa_settings.disable_features.reactions) return this.html.find('.full-start-new__reactions, .button--reaction').remove()
 
-        let reactions_data = this.data.reactions
+        let reactions_data = this.data.reactions || {result: []}
+        let reactions_ready = Boolean(this.data.reactions)
 
         let vote = (type, add = false)=>{
             let mine = Storage.get('mine_reactions',{})
@@ -72,6 +73,14 @@ export default {
             }
         }
 
+        let show = ()=>{
+            this.html.find('.full-start-new__reactions, .button--reaction').removeClass('hide')
+
+            draw()
+        }
+
+        if(!reactions_ready) this.html.find('.full-start-new__reactions, .button--reaction').addClass('hide')
+
         let items = [
             {type: 'fire'},
             {type: 'nice'},
@@ -89,6 +98,8 @@ export default {
         })
 
         this.html.find('.button--reaction').on('hover:enter',()=>{
+            if(!reactions_ready) return
+
             Select.show({
                 title: Lang.translate('title_reactions'),
                 items: items,
@@ -126,6 +137,21 @@ export default {
             })
         })
 
-        draw()
+        if(reactions_ready) draw()
+
+        this.updateReactions = (data)=>{
+            reactions_data = data || {result: []}
+            reactions_ready = true
+
+            show()
+        }
+    },
+
+    onEnrichment: function(event){
+        if(event && event.name == 'reactions' && this.updateReactions) this.updateReactions(event.data)
+    },
+
+    onDestroy: function(){
+        this.updateReactions = null
     }
 }

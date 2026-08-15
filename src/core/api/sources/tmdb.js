@@ -15,6 +15,7 @@ import Router from '../../router'
 import Permit from '../../account/permit'
 import VPN from '../../../core/vpn'
 import Keys from '../../tmdb/keys'
+import CustomConfig from '../../../custom/config'
 
 
 let network   = new Reguest()
@@ -248,7 +249,7 @@ function find(find, params = {}){
 }
 
 function main(params = {}, oncomplite, onerror){
-    let parts_limit = 6
+    let parts_limit = CustomConfig.fastStartupEnabled ? 3 : 6
     let parts_data  = [
         (call)=>{
             get('movie/now_playing',params,(json)=>{
@@ -534,9 +535,24 @@ function category(params = {}, oncomplite, onerror){
     return loadPart
 }
 
-function full(params = {}, oncomplite, onerror){
-    let status = new Status(9)
-        status.onComplite = oncomplite
+function full(params = {}, oncomplite, onerror, onupdate){
+    let progressive = CustomConfig.progressiveCardEnabled && typeof onupdate == 'function'
+    let status = new Status(progressive ? 8 : 9)
+    let completed = false
+
+    status.onComplite = (data)=>{
+        completed = true
+
+        oncomplite(data)
+    }
+
+    let appendOptional = (name, data)=>{
+        if(!progressive) return status.append(name, data)
+
+        status.data[name] = data
+
+        if(completed) onupdate(name, data)
+    }
     let image_language = (Storage.field('tmdb_lang') || 'en').split(/[-_]/)[0]
     let image_languages = [image_language, 'en', 'null'].filter((language, index, list)=>list.indexOf(language) == index).join(',')
 
@@ -612,22 +628,22 @@ function full(params = {}, oncomplite, onerror){
     }
 
     Api.sources.cub.reactionsGet(params,(json)=>{
-        status.append('reactions', json)
+        appendOptional('reactions', json)
     })
 
     if(Lang.selected(['ru','uk','be']) && window.lampa_settings.account_use && !Permit.child){
-        status.need++
+        if(!progressive) status.need++
 
         Api.sources.cub.discussGet(params, (json)=>{
-            status.append('discuss', json)
-        },status.error.bind(status))
+            appendOptional('discuss', json)
+        },progressive ? ()=>{} : status.error.bind(status))
     }
 
     if(params.method == 'movie'){
-        status.need++
+        if(!progressive) status.need++
 
         Api.sources.cub.metadataGet(params, (json)=>{
-            status.append('metadata', json)
+            appendOptional('metadata', json)
         },status.error.bind(status))
     }
 }

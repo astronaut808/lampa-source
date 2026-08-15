@@ -1,10 +1,11 @@
 import Manifest from '../core/manifest'
 import CustomConfig from '../custom/config'
 
-const SLOW_CARD_THRESHOLD = 15000
+const SLOW_CARD_THRESHOLD = 2000
 const REQUEST_LIMIT = 40
 
 let attempt = null
+let recent = []
 
 function timestamp(){
     return Date.now()
@@ -114,13 +115,38 @@ function requestStart(event){
     if(attempt.pending.length > REQUEST_LIMIT) attempt.pending.shift()
 }
 
+function requestOwner(params){
+    let candidates = attempt ? [attempt].concat(recent) : recent
+
+    return candidates.find(current=>current.pending.find(item=>item.params === params))
+}
+
+function forget(current){
+    recent = recent.filter(item=>item !== current)
+
+    clearTimeout(current.retention)
+}
+
+function remember(current){
+    if(!current.pending.length) return
+
+    recent.push(current)
+    recent = recent.slice(-5)
+
+    current.retention = setTimeout(()=>forget(current), 15000)
+}
+
 function requestFinish(event, outcome){
-    if(!attempt || !event?.params) return
+    if(!event?.params) return
+
+    let current = requestOwner(event.params)
+
+    if(!current) return
 
     let index = -1
 
-    for(let i = attempt.pending.length - 1; i >= 0; i--){
-        if(attempt.pending[i].params === event.params){
+    for(let i = current.pending.length - 1; i >= 0; i--){
+        if(current.pending[i].params === event.params){
             index = i
             break
         }
@@ -128,10 +154,10 @@ function requestFinish(event, outcome){
 
     if(index < 0) return
 
-    let pending = attempt.pending.splice(index, 1)[0]
+    let pending = current.pending.splice(index, 1)[0]
     let status = event.error && Number(event.error.status) || Number(event.status) || 0
 
-    attempt.requests.push({
+    current.requests.push({
         host: pending.host,
         kind: pending.kind,
         duration_ms: elapsed(pending.started_at),
@@ -139,7 +165,13 @@ function requestFinish(event, outcome){
         status
     })
 
-    attempt.requests = attempt.requests.slice(-REQUEST_LIMIT)
+    current.requests = current.requests.slice(-REQUEST_LIMIT)
+
+    if(current.completed_at){
+        report(current, current.outcome)
+
+        if(!current.pending.length) forget(current)
+    }
 }
 
 function requestSnapshot(current){
@@ -215,6 +247,7 @@ function finish(outcome, error){
     clearTimeout(current.timeout)
     current.completed_at = timestamp()
     current.error = error || ''
+    current.outcome = outcome
 
     if(outcome == 'error' && !current.error){
         let failed = current.requests.slice().reverse().find(item=>item.outcome == 'error')
@@ -223,6 +256,7 @@ function finish(outcome, error){
     }
 
     report(current, outcome)
+    remember(current)
 }
 
 function begin(object){
