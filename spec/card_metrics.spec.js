@@ -43,6 +43,29 @@ describe('card diagnostics', ()=>{
         expect(client).toContain('report(current, current.outcome)')
     })
 
+    it('queues late enrichment through the normal lazy row loader', ()=>{
+        let queueRowsBody = full.match(/let queueRows = \(rows\)=>\{([\s\S]*?)\n            \}/)?.[1] || ''
+        let state = {
+            rows: ['start', 'description', 'persons', 'episodes', 'recommendations'],
+            items: ['start', 'description', 'persons'],
+            card_ready: true,
+            card_destroyed: false,
+            active: 1,
+            emitted: [],
+            emit(type, position){
+                this.emitted.push({type, position})
+            }
+        }
+        let queueRows = new Function(`return (rows)=>{${queueRowsBody}}`).call(state)
+
+        queueRows(['metadata'])
+
+        expect(state.rows).toEqual(['start', 'description', 'persons', 'episodes', 'recommendations', 'metadata'])
+        expect(state.items).toHaveLength(3)
+        expect(state.rows.slice(state.items.length, 5)).toEqual(['episodes', 'recommendations'])
+        expect(state.emitted).toEqual([{type: 'scroll', position: 1}])
+    })
+
     it('exposes same-origin card endpoints', ()=>{
         expect(nginx).toContain('location = /metrics/card {')
         expect(nginx).toContain('location = /metrics/card/history {')

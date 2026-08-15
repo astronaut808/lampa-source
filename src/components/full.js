@@ -62,18 +62,14 @@ function component(object){
                 metadata: false
             }
 
-            let appendRows = (rows)=>{
+            let queueRows = (rows)=>{
                 rows.forEach(row=>this.rows.push(row))
 
                 if(!this.card_ready || this.card_destroyed) return
 
-                this.fragment = document.createDocumentFragment()
-
-                rows.forEach(this.emit.bind(this, 'createAndAppend'))
-
-                this.scroll.append(this.fragment)
-
-                Layer.visible(this.scroll.render())
+                // Строки должны создаваться только через onScroll: this.items
+                // всегда соответствует уже построенному префиксу this.rows.
+                this.emit('scroll', this.active)
             }
 
             let metadataRows = (metadata)=>{
@@ -117,8 +113,8 @@ function component(object){
                     this.items[0].emit('enrichment', {name, data})
                     this.items[0].emit('groupButtons')
                 }
-                else if(name == 'metadata') appendRows(metadataRows(data))
-                else if(name == 'discuss') appendRows(discussRows(data))
+                else if(name == 'metadata') queueRows(metadataRows(data))
+                else if(name == 'discuss') queueRows(discussRows(data))
 
                 Lampa.Listener.send('full', {
                     link: this,
@@ -196,7 +192,7 @@ function component(object){
                     data
                 })
 
-                appendRows(metadataRows(data.metadata))
+                queueRows(metadataRows(data.metadata))
 
                 // Создаем эпизоды
                 if(!adult_block && data.episodes && data.episodes.episodes) {
