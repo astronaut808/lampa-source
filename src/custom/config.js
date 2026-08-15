@@ -8,6 +8,8 @@ const CustomConfig = Object.freeze({
     builtinAdsEnabled: RuntimeConfig.builtinAdsEnabled === true,
     shotsEnabled: RuntimeConfig.shotsEnabled === true,
     playbackMetricsEnabled: RuntimeConfig.playbackMetricsEnabled !== false,
+    cardMetricsEnabled: RuntimeConfig.cardMetricsEnabled !== false,
+    networkMetricsEnabled: RuntimeConfig.networkMetricsEnabled !== false,
     disableBuiltinAds: RuntimeConfig.builtinAdsEnabled !== true
 })
 

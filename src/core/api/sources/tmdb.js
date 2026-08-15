@@ -580,9 +580,9 @@ function full(params = {}, oncomplite, onerror){
 
         status.append('movie', json)
     },()=>{
-        status.need -= 2
+        status.stop()
 
-        status.error()
+        onerror()
     }, {life: day * 7})
 
     if(!Permit.child_small){

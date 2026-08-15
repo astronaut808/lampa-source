@@ -53,10 +53,22 @@ function component(object){
             this.view = 3
             this.rows = ['start', 'description']
 
+            let fail = (error)=>{
+                let status = error || {}
+
+                Lampa.Listener.send('astronaut:card', {
+                    type: 'error',
+                    object,
+                    error: status
+                })
+
+                this.emit('error', status)
+            }
+
             this.html.addClass('layer--wheight')
 
             Api.full(object, (data)=>{
-                if(!data.movie) return this.emit('error', {empty: true})
+                if(!data.movie) return fail({empty: true})
 
                 // Добавляем в пропсы данные
                 this.props.set(data)
@@ -76,7 +88,7 @@ function component(object){
                     if(window.lampa_settings.lgbt[data.movie.id + '_' + (data.movie.first_air_date ? 'tv' : 'movie')]) data.movie.lgbt = 'list'
                 }
                 
-                if(data.movie.blocked || data.movie.lgbt) return this.emit('error', {blocked: true, lgbt: data.movie.lgbt})
+                if(data.movie.blocked || data.movie.lgbt) return fail({blocked: true, lgbt: data.movie.lgbt})
 
                 // Для плагинов которые используют Activity.active().card
                 object.card = data.movie
@@ -230,7 +242,7 @@ function component(object){
 
                 this.activity.toggle()
 
-            }, this.emit.bind(this, 'error'))
+            }, fail)
         },
         onBuild: function(){
             this.scroll.onScroll = this.emit.bind(this, 'scroll')

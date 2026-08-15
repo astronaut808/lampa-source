@@ -442,6 +442,13 @@ function Request(){
             if(params.attempts && params.attempts > 0){
                 params.attempts--
 
+                Lampa.Listener.send('request_retry', {
+                    params,
+                    error: jqXHR,
+                    exception,
+                    remaining: params.attempts
+                })
+
                 console.log('Request','attempt left:', params.attempts, 'for', params.url)
 
                 return go(params)
@@ -487,7 +494,7 @@ function Request(){
 
         if(params.start) params.start();
 
-        let secuses = function(data, fromcache = false){
+        let secuses = function(data, fromcache = false, response_status = 0){
             function sendSecuses(send_data){
                 if(params.cache && params.cache.life > 0 && !fromcache) {
                     cacheSet(params, send_data)
@@ -513,7 +520,7 @@ function Request(){
 
             let abort_called = false
 
-            Lampa.Listener.send('request_secuses', {params, data, abort: ()=>{
+            Lampa.Listener.send('request_secuses', {params, data, status: response_status, fromcache, abort: ()=>{
                 abort_called = true
 
                 return sendSecuses
@@ -530,9 +537,9 @@ function Request(){
             url: params.url,
             timeout: timeout,
             crossDomain: true,
-            success: (data) => {
+            success: (data, text_status, jqXHR) => {
                 if(datatype == 'json' && !data) error({status: 500})
-                else secuses(data);
+                else secuses(data, false, jqXHR && jqXHR.status || 0);
             },
             error: error,
             beforeSend: (xhr) => {

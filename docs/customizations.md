@@ -25,6 +25,8 @@
 | `LAMPA_BUILTIN_ADS_ENABLED` | `false` | Встроенный рекламный lifecycle, preroll и `personal.lampa` |
 | `LAMPA_SHOTS_ENABLED` | `false` | Автоматическая загрузка встроенного плагина Shots |
 | `LAMPA_PLAYBACK_METRICS_ENABLED` | `true` | Локальная диагностика воспроизведения |
+| `LAMPA_CARD_METRICS_ENABLED` | `true` | Локальная диагностика открытия карточек |
+| `LAMPA_NETWORK_METRICS_ENABLED` | `true` | Пассивная диагностика запросов сетевого слоя Lampa |
 
 Флаги не должны менять авторизацию CUB, синхронизацию аккаунта, загрузку пользовательских плагинов, HLS/DASH или внешние источники воспроизведения.
 
@@ -59,7 +61,15 @@
 
 Основные файлы: `src/utils/playback_metrics.js`, `src/interaction/loading.js`, `src/interaction/player/video.js`, `metrics/server.js`.
 
-## 6. Брендинг и документация
+## 6. Сетевая доступность и синтетические проверки
+
+Сетевой журнал фиксирует результат, длительность, HTTP-статус, категорию ошибки и число повторов для запросов, проходящих через `Lampa.Network`. Серверный metrics-контейнер отдельно проверяет DNS и HTTP-зависимости. Эти две точки наблюдения не взаимозаменяемы: доступность с сервера не доказывает доступность с телевизора или iPad.
+
+Полные URL, query-параметры, payload, заголовки, email, cookies и токены не сохраняются.
+
+Основные файлы: `src/utils/network_metrics.js`, `metrics/synthetic.js`, `metrics/server.js`, `deploy/nginx.conf`.
+
+## 7. Брендинг и документация
 
 - название страницы `Astronaut Lampa`;
 - собственная иконка для VIDAA;

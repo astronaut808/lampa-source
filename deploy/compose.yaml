@@ -6,6 +6,12 @@ services:
       target: metrics
     image: astronaut-lampa-metrics:${IMAGE_TAG:-local}
     restart: unless-stopped
+    environment:
+      SYNTHETIC_MONITORING_ENABLED: "${SYNTHETIC_MONITORING_ENABLED:-true}"
+      SYNTHETIC_INTERVAL_MS: "${SYNTHETIC_INTERVAL_MS:-60000}"
+      SYNTHETIC_TIMEOUT_MS: "${SYNTHETIC_TIMEOUT_MS:-5000}"
+      SYNTHETIC_DNS_TARGETS: "${SYNTHETIC_DNS_TARGETS:-tmdb_images=image.tmdb.org,cub_api=apitmdb.cub.rip,cub=cub.rip}"
+      SYNTHETIC_HTTP_TARGETS: "${SYNTHETIC_HTTP_TARGETS:-lampa=http://lampa:8080/healthz,cub=https://cub.rip/}"
     read_only: true
     volumes:
       - lampa-metrics:/data
@@ -31,6 +37,8 @@ services:
       LAMPA_BUILTIN_ADS_ENABLED: "${LAMPA_BUILTIN_ADS_ENABLED:-false}"
       LAMPA_SHOTS_ENABLED: "${LAMPA_SHOTS_ENABLED:-false}"
       LAMPA_PLAYBACK_METRICS_ENABLED: "${LAMPA_PLAYBACK_METRICS_ENABLED:-true}"
+      LAMPA_CARD_METRICS_ENABLED: "${LAMPA_CARD_METRICS_ENABLED:-true}"
+      LAMPA_NETWORK_METRICS_ENABLED: "${LAMPA_NETWORK_METRICS_ENABLED:-true}"
     ports:
       - "${LAMPA_BIND_ADDRESS:-0.0.0.0}:${LAMPA_PORT:-8090}:8080"
     read_only: true

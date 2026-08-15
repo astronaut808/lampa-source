@@ -130,7 +130,7 @@ function requestFinish(event, outcome){
     if(index < 0) return
 
     let pending = pendingRequests.splice(index, 1)[0]
-    let status = event && event.error && Number(event.error.status) || 0
+    let status = event && (event.error && Number(event.error.status) || Number(event.status)) || 0
 
     recentRequests.push({
         started_at: pending.started_at,

@@ -112,6 +112,8 @@ import Router from './core/router'
 import Timer from './core/timer'
 import StartupMetrics from './utils/startup_metrics'
 import PlaybackMetrics from './utils/playback_metrics'
+import CardMetrics from './utils/card_metrics'
+import NetworkMetrics from './utils/network_metrics'
 
 import ServiceTorserver from './services/torrserver'
 import ServiceWatched from './services/watched'
@@ -368,7 +370,9 @@ function initClass(){
         Router,
         Timer,
         StartupMetrics,
-        PlaybackMetrics
+        PlaybackMetrics,
+        CardMetrics,
+        NetworkMetrics
     }
 }
 
@@ -586,6 +590,12 @@ function startApp(){
 
     PlaybackMetrics.init()
     LoadingProgress.status('PlaybackMetrics init')
+
+    CardMetrics.init()
+    LoadingProgress.status('CardMetrics init')
+
+    NetworkMetrics.init()
+    LoadingProgress.status('NetworkMetrics init')
 
     Iframe.init()
     LoadingProgress.status('Iframe init')

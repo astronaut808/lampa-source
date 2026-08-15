@@ -24,6 +24,7 @@ ENV NODE_ENV=production \
     METRICS_DATA_DIR=/data
 
 COPY metrics/server.js ./server.js
+COPY metrics/synthetic.js ./synthetic.js
 
 RUN mkdir -p /data && chown -R node:node /app /data
 
@@ -31,7 +32,7 @@ USER node
 EXPOSE 9100
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:9100/health >/dev/null || exit 1
+    CMD wget -qO- http://127.0.0.1:9100/health/live >/dev/null || exit 1
 
 CMD ["node", "server.js"]
 
