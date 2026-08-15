@@ -665,6 +665,8 @@ function play(data){
 
     if(!run) return console.log('Player','play aborted by callback')
 
+    console.log('Player','start play')
+
     // Если это торрент, то увеличиваем таймаут для HLS манифеста, чтобы не было проблем с буферизацией
     if(data.torrent_hash && Torserver.gstWork()) data.hls_manifest_timeout = 60000
 
@@ -681,8 +683,14 @@ function play(data){
         // Если качество одно, то удаляем объект качества, чтобы не показывать панель выбора качества
         if(Arrays.getKeys(data.quality).length == 1) delete data.quality
         else{
-            // Если качество несколько, то получаем дефолтное качество
-            data.url = getUrlQuality(data.quality, false) || data.url
+            let quality_url = getUrlQuality(data.quality, false)
+
+            if(quality_url){
+                // Меняем ссылку на видео на выбранное качество, чтобы плеер сразу начал воспроизведение с нужного качества
+                data.url = quality_url
+
+                console.log('Player','quality selected')
+            }
         }
     }
 
@@ -718,7 +726,7 @@ function iptv(data){
 
         let lauch = ()=>{
             work = data
-            
+
             html.toggleClass('iptv', Boolean(data.iptv))
 
             listener.send('start',data)
@@ -842,7 +850,9 @@ function loading(status){
 function destroy(){
     Timeline.destroy()
 
-    if(work.viewed) work.viewed(viewing.time)
+    if(work.viewed) work.viewed(
+        Storage.field('torrserver_tracktimecode') ? Math.round(Video.video().currentTime) : viewing.time
+    )
 
     work = false
 
