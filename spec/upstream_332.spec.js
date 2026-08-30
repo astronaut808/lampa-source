@@ -8,10 +8,10 @@ const params = fs.readFileSync(new URL('../src/interaction/settings/params.js', 
 const torrent = fs.readFileSync(new URL('../src/interaction/torrent.js', import.meta.url), 'utf8')
 const torserver = fs.readFileSync(new URL('../src/interaction/torserver.js', import.meta.url), 'utf8')
 
-describe('upstream 3.3.1 integration', ()=>{
+describe('upstream 3.3.2 integration', ()=>{
     it('reports the upstream application and stylesheet version', ()=>{
-        expect(manifest).toContain("css_version: '3.3.1'")
-        expect(manifest).toContain("app_version: '3.3.1'")
+        expect(manifest).toContain("css_version: '3.3.2'")
+        expect(manifest).toContain("app_version: '3.3.2'")
     })
 
     it('uses the public player volume API', ()=>{
