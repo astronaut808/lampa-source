@@ -159,6 +159,77 @@ function choice(value, allowed, fallback = ''){
     return allowed.includes(value) ? value : fallback
 }
 
+function normalizePlaybackSample(value){
+    if(!value || typeof value !== 'object') return null
+
+    return {
+        at_ms: number(value.at_ms),
+        media_time_ms: number(value.media_time_ms),
+        buffer_ahead_ms: number(value.buffer_ahead_ms),
+        ready_state: number(value.ready_state, 4),
+        network_state: number(value.network_state, 3),
+        paused: Boolean(value.paused),
+        seeking: Boolean(value.seeking),
+        ended: Boolean(value.ended),
+        width: number(value.width, 16384),
+        height: number(value.height, 16384),
+        frame_counters: Boolean(value.frame_counters),
+        decoded_frames: number(value.decoded_frames, 1000000000),
+        dropped_frames: number(value.dropped_frames, 1000000000)
+    }
+}
+
+function normalizePlaybackEdge(value){
+    return normalizePlaybackSample(value)
+}
+
+function normalizePlaybackDiagnostics(value){
+    value = value && typeof value === 'object' ? value : {}
+
+    let connection = value.connection && typeof value.connection === 'object' ? value.connection : {}
+    let samples = Array.isArray(value.recent_samples) ? value.recent_samples : []
+    let stalls = Array.isArray(value.stalls) ? value.stalls : []
+    let frameFreezes = Array.isArray(value.frame_freezes) ? value.frame_freezes : []
+
+    return {
+        sample_interval_ms: number(value.sample_interval_ms, 60000),
+        connection: {
+            effective_type: text(connection.effective_type, 20),
+            downlink_mbps: number(connection.downlink_mbps, 100000),
+            rtt_ms: number(connection.rtt_ms, 600000),
+            save_data: Boolean(connection.save_data)
+        },
+        recent_samples: samples.slice(-30).map(normalizePlaybackSample).filter(Boolean),
+        stalls: stalls.slice(-20).map(item=>({
+            sequence: number(item && item.sequence, 100000),
+            trigger: choice(text(item && item.trigger, 20), ['waiting', 'stalled'], ''),
+            duration_ms: number(item && item.duration_ms),
+            recovered: Boolean(item && item.recovered),
+            classification: choice(text(item && item.classification, 50), [
+                'active',
+                'buffer_starvation',
+                'video_frames_not_advancing',
+                'pipeline_not_advancing_with_buffer',
+                'unknown'
+            ], 'unknown'),
+            start: normalizePlaybackEdge(item && item.start),
+            end: normalizePlaybackEdge(item && item.end)
+        })),
+        frame_freezes: frameFreezes.slice(-10).map(item=>({
+            sequence: number(item && item.sequence, 100000),
+            kind: choice(text(item && item.kind, 50), [
+                'buffer_starvation',
+                'video_frames_not_advancing',
+                'pipeline_not_advancing_with_buffer'
+            ], ''),
+            duration_ms: number(item && item.duration_ms),
+            recovered: Boolean(item && item.recovered),
+            start: normalizePlaybackEdge(item && item.start),
+            end: normalizePlaybackEdge(item && item.end)
+        })).filter(item=>item.kind)
+    }
+}
+
 function normalizePlayback(report){
     if(
         !report ||
@@ -220,6 +291,7 @@ function normalizePlayback(report){
             error: text(events.error, 240),
             fatal: Boolean(events.fatal)
         },
+        diagnostics: normalizePlaybackDiagnostics(report.diagnostics),
         requests: requests.slice(-30).map(item=>({
             host: text(item && item.host, 120),
             duration_ms: number(item && item.duration_ms),
@@ -227,6 +299,82 @@ function normalizePlayback(report){
             status: number(item && item.status, 999)
         }))
     }
+}
+
+function percentile(values, fraction){
+    if(!values.length) return 0
+
+    values = values.slice().sort((a, b)=>a - b)
+
+    let index = Math.min(values.length - 1, Math.max(0, Math.ceil(values.length * fraction) - 1))
+
+    return values[index]
+}
+
+function playbackDevice(report){
+    let userAgent = report.device && report.device.user_agent || ''
+
+    if(/Hisense|VIDAA|Odin/i.test(userAgent)) return 'vidaa'
+    if(/iPad|iPhone/i.test(userAgent)) return 'ios'
+    if(/Macintosh/i.test(userAgent)) return 'mac'
+
+    return report.device && report.device.platform || 'unknown'
+}
+
+function summarizePlaybackReports(reports){
+    let stalls = []
+    let frameFreezes = []
+    let classifications = {}
+    let freezeKinds = {}
+    let devices = {}
+
+    reports.forEach(report=>{
+        let diagnostics = report.diagnostics || {}
+        let reportStalls = Array.isArray(diagnostics.stalls) ? diagnostics.stalls : []
+        let reportFreezes = Array.isArray(diagnostics.frame_freezes) ? diagnostics.frame_freezes : []
+        let device = playbackDevice(report)
+
+        stalls = stalls.concat(reportStalls)
+        frameFreezes = frameFreezes.concat(reportFreezes)
+
+        if(!devices[device]) devices[device] = {reports: 0, stalls: 0, frame_freezes: 0, fatal_errors: 0}
+
+        devices[device].reports++
+        devices[device].stalls += reportStalls.length
+        devices[device].frame_freezes += reportFreezes.length
+        if(report.events && report.events.fatal) devices[device].fatal_errors++
+    })
+
+    stalls.forEach(stall=>{
+        let name = stall.classification || 'unknown'
+        classifications[name] = (classifications[name] || 0) + 1
+    })
+    frameFreezes.forEach(freeze=>{
+        let name = freeze.kind || 'unknown'
+        freezeKinds[name] = (freezeKinds[name] || 0) + 1
+    })
+
+    let durations = stalls.map(stall=>number(stall.duration_ms))
+
+    return {
+        reports: reports.length,
+        reports_with_stalls: reports.filter(report=>report.diagnostics && report.diagnostics.stalls && report.diagnostics.stalls.length).length,
+        stall_count: stalls.length,
+        stall_duration_ms: {
+            average: durations.length ? Math.round(durations.reduce((sum, value)=>sum + value, 0) / durations.length) : 0,
+            p50: percentile(durations, 0.5),
+            p95: percentile(durations, 0.95),
+            maximum: durations.length ? Math.max(...durations) : 0
+        },
+        stall_classifications: classifications,
+        frame_freeze_count: frameFreezes.length,
+        frame_freeze_kinds: freezeKinds,
+        devices: devices
+    }
+}
+
+function playbackSummary(){
+    return summarizePlaybackReports(playbackHistory)
 }
 
 function normalizeCard(report){
@@ -424,14 +572,6 @@ function storeSynthetic(report){
     return syntheticHistory.length
 }
 
-function percentile(values, value){
-    if(!values.length) return 0
-
-    let index = Math.min(values.length - 1, Math.ceil(values.length * value) - 1)
-
-    return values[index]
-}
-
 function cardSummary(){
     let durations = cardHistory.map(item=>item.timings.total_ms).filter(Boolean).sort((a,b)=>a - b)
     let totalDuration = durations.reduce((total, duration)=>total + duration, 0)
@@ -576,6 +716,7 @@ function createServer(){
             return respond(response, 200, playbackHistory.length ? playbackHistory[playbackHistory.length - 1] : {status: 'waiting_for_first_report'})
         }
         if(request.method === 'GET' && pathname === '/metrics/playback/history') return respond(response, 200, playbackHistory)
+        if(request.method === 'GET' && pathname === '/metrics/playback/summary') return respond(response, 200, playbackSummary())
         if(request.method === 'DELETE' && pathname === '/metrics/playback/history'){
             let cleared = playbackHistory.length
 
@@ -678,5 +819,7 @@ module.exports = {
     normalizePlayback,
     normalizeCard,
     normalizeNetworkBatch,
-    networkSummary
+    networkSummary,
+    summarizePlaybackReports,
+    playbackSummary
 }

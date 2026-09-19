@@ -1,16 +1,28 @@
 import Manifest from '../core/manifest'
 import CustomConfig from '../custom/config'
+import {
+    FRAME_WINDOW_MS,
+    sample as mediaSample,
+    detectIssue,
+    classifyStall
+} from './playback_observer'
 
 const PLAYBACK_TIMEOUT = 30000
 const RESOLVER_REPORT_THRESHOLD = 2000
 const REQUEST_WINDOW = 30000
 const REQUEST_RETENTION = 120000
 const REQUEST_LIMIT = 50
+const SAMPLE_INTERVAL = 1000
+const SAMPLE_LIMIT = 30
+const STALL_LIMIT = 20
+const FRAME_FREEZE_LIMIT = 10
+const STALL_REPORT_DELAY = 2000
 
 let attempt = null
 let resolver = null
 let recentRequests = []
 let pendingRequests = []
+let sampleTimer = null
 
 function timestamp(){
     return Date.now()
@@ -198,7 +210,71 @@ function deviceInfo(){
     }
 }
 
-function report(current){
+function connectionInfo(){
+    let browser = typeof navigator !== 'undefined' ? navigator : {}
+    let connection = browser.connection || browser.mozConnection || browser.webkitConnection || {}
+
+    return {
+        effective_type: clampText(connection.effectiveType || '', 20),
+        downlink_mbps: Math.max(0, Number(connection.downlink) || 0),
+        rtt_ms: Math.max(0, Number(connection.rtt) || 0),
+        save_data: Boolean(connection.saveData)
+    }
+}
+
+function videoElement(){
+    try{
+        return Lampa.PlayerVideo.video()
+    }
+    catch(e){
+        return null
+    }
+}
+
+function snapshot(current){
+    let video = videoElement()
+
+    return video ? mediaSample(video, elapsed(current.started_at)) : null
+}
+
+function diagnostics(current){
+    let samples = current.samples || []
+    let stalls = (current.stalls || []).slice(-STALL_LIMIT)
+    let frameFreezes = (current.frame_freezes || []).slice(-FRAME_FREEZE_LIMIT)
+
+    if(current.active_stall){
+        stalls = stalls.concat([{
+            sequence: current.active_stall.sequence,
+            trigger: current.active_stall.trigger,
+            duration_ms: elapsed(current.active_stall.started_at),
+            recovered: false,
+            classification: 'active',
+            start: current.active_stall.start,
+            end: snapshot(current)
+        }]).slice(-STALL_LIMIT)
+    }
+
+    if(current.active_frame_freeze){
+        frameFreezes = frameFreezes.concat([{
+            sequence: current.active_frame_freeze.sequence,
+            kind: current.active_frame_freeze.kind,
+            duration_ms: elapsed(current.active_frame_freeze.started_at),
+            recovered: false,
+            start: current.active_frame_freeze.start,
+            end: snapshot(current)
+        }]).slice(-FRAME_FREEZE_LIMIT)
+    }
+
+    return {
+        sample_interval_ms: SAMPLE_INTERVAL,
+        connection: connectionInfo(),
+        recent_samples: samples.slice(-SAMPLE_LIMIT),
+        stalls: stalls,
+        frame_freezes: frameFreezes
+    }
+}
+
+function report(current, outcome){
     if(!current) return
 
     let now = timestamp()
@@ -219,7 +295,7 @@ function report(current){
         captured_at: new Date().toISOString(),
         attempt_id: current.id,
         phase: current.phase,
-        outcome: current.outcome,
+        outcome: outcome || current.outcome,
         app: {
             version: Manifest.app_version
         },
@@ -234,6 +310,7 @@ function report(current){
             error: clampText(current.error || '', 240),
             fatal: Boolean(current.fatal)
         },
+        diagnostics: diagnostics(current),
         requests: requestsSince(current.resolver_started_at || current.started_at)
     })
 }
@@ -242,15 +319,106 @@ function newId(){
     return timestamp().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 }
 
+function finishStall(current, recovered){
+    if(!current || !current.active_stall) return false
+
+    let active = current.active_stall
+    let end = snapshot(current)
+
+    clearTimeout(active.report_timeout)
+
+    current.stalls.push({
+        sequence: active.sequence,
+        trigger: active.trigger,
+        duration_ms: elapsed(active.started_at),
+        recovered: Boolean(recovered),
+        classification: active.start && end ? classifyStall(active.start, end) : 'unknown',
+        start: active.start,
+        end: end
+    })
+    current.stalls = current.stalls.slice(-STALL_LIMIT)
+    current.active_stall = null
+
+    return true
+}
+
+function finishFrameFreeze(current, recovered){
+    if(!current || !current.active_frame_freeze) return false
+
+    let active = current.active_frame_freeze
+
+    current.frame_freezes.push({
+        sequence: active.sequence,
+        kind: active.kind,
+        duration_ms: elapsed(active.started_at),
+        recovered: Boolean(recovered),
+        start: active.start,
+        end: snapshot(current)
+    })
+    current.frame_freezes = current.frame_freezes.slice(-FRAME_FREEZE_LIMIT)
+    current.active_frame_freeze = null
+
+    return true
+}
+
+function stopSampler(){
+    clearInterval(sampleTimer)
+    sampleTimer = null
+}
+
+function recordSample(){
+    if(!attempt) return
+
+    let current = snapshot(attempt)
+
+    if(!current) return
+
+    attempt.samples.push(current)
+    attempt.samples = attempt.samples.slice(-SAMPLE_LIMIT)
+
+    if(!attempt.marks.playing) return
+
+    let issue = detectIssue(attempt.samples)
+    let active = attempt.active_frame_freeze
+
+    if(issue && (!active || active.kind !== issue)){
+        if(active) finishFrameFreeze(attempt, true)
+
+        attempt.frame_sequence++
+        attempt.active_frame_freeze = {
+            sequence: attempt.frame_sequence,
+            kind: issue,
+            started_at: Math.max(attempt.started_at, timestamp() - FRAME_WINDOW_MS),
+            start: current
+        }
+
+        report(attempt, 'frame_freeze')
+    }
+    else if(!issue && active){
+        finishFrameFreeze(attempt, true)
+        report(attempt, 'playing')
+    }
+}
+
+function startSampler(){
+    stopSampler()
+    recordSample()
+    sampleTimer = setInterval(recordSample, SAMPLE_INTERVAL)
+}
+
 function closeAttempt(outcome){
     if(!attempt) return
 
     clearTimeout(attempt.timeout)
+    stopSampler()
 
     if(attempt.waiting_started){
         attempt.waiting_ms += elapsed(attempt.waiting_started)
         attempt.waiting_started = 0
     }
+
+    finishStall(attempt, false)
+    finishFrameFreeze(attempt, false)
 
     attempt.outcome = outcome || attempt.outcome
     report(attempt)
@@ -279,6 +447,13 @@ function beginAttempt(data){
         waiting_ms: 0,
         waiting_started: 0,
         stalled_count: 0,
+        samples: [],
+        stalls: [],
+        active_stall: null,
+        stall_sequence: 0,
+        frame_freezes: [],
+        active_frame_freeze: null,
+        frame_sequence: 0,
         error: '',
         fatal: false,
         timeout: setTimeout(()=>{
@@ -293,6 +468,8 @@ function beginAttempt(data){
         clearTimeout(linkedResolver.timeout)
         resolver = null
     }
+
+    startSampler()
 }
 
 function mark(name){
@@ -313,10 +490,33 @@ function onPlaying(){
         attempt.waiting_started = 0
     }
 
+    let recovered = finishStall(attempt, true)
+
     if(firstPlaying){
         clearTimeout(attempt.timeout)
         attempt.outcome = 'playing'
         report(attempt)
+    }
+    else if(recovered){
+        attempt.outcome = 'playing'
+        report(attempt)
+    }
+}
+
+function beginStall(trigger){
+    if(!attempt || !attempt.marks.playing || attempt.active_stall) return
+
+    attempt.stall_sequence++
+    attempt.active_stall = {
+        sequence: attempt.stall_sequence,
+        trigger: trigger,
+        started_at: timestamp(),
+        start: snapshot(attempt),
+        report_timeout: setTimeout(()=>{
+            if(attempt && attempt.active_stall){
+                report(attempt, 'waiting')
+            }
+        }, STALL_REPORT_DELAY)
     }
 }
 
@@ -325,6 +525,15 @@ function onWaiting(){
 
     attempt.waiting_count++
     if(!attempt.waiting_started) attempt.waiting_started = timestamp()
+
+    beginStall('waiting')
+}
+
+function onStalled(){
+    if(!attempt) return
+
+    attempt.stalled_count++
+    beginStall('stalled')
 }
 
 function onError(event){
@@ -418,9 +627,7 @@ function init(){
     Lampa.PlayerVideo.listener.follow('canplay', ()=>mark('canplay'))
     Lampa.PlayerVideo.listener.follow('astronaut:playing', onPlaying)
     Lampa.PlayerVideo.listener.follow('astronaut:waiting', onWaiting)
-    Lampa.PlayerVideo.listener.follow('astronaut:stalled', ()=>{
-        if(attempt) attempt.stalled_count++
-    })
+    Lampa.PlayerVideo.listener.follow('astronaut:stalled', onStalled)
     Lampa.PlayerVideo.listener.follow('error', onError)
     Lampa.PlayerVideo.listener.follow('ended', ()=>closeAttempt('ended'))
 }

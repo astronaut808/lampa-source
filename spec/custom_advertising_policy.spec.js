@@ -3,6 +3,9 @@ import {
     canShowBuiltinPreroll,
     shouldInitializeBuiltinAds
 } from '../src/custom/advertising_policy'
+import fs from 'node:fs'
+
+const banner = fs.readFileSync(new URL('../src/interaction/advert/banner.js', import.meta.url), 'utf8')
 
 suite('custom advertising policy', () => {
     const states = [
@@ -27,5 +30,11 @@ suite('custom advertising policy', () => {
 
     test('does not initialize the built-in advertising manager', () => {
         expect(shouldInitializeBuiltinAds()).toBe(false)
+    })
+
+    test('blocks plugin VAST banners before any advertising manager starts', () => {
+        expect(banner).toContain("import { shouldInitializeBuiltinAds } from '../../custom/advertising_policy'")
+        expect(banner).toMatch(/function init\(\)\{\s*[^]*if\(!shouldInitializeBuiltinAds\(\)\) return/)
+        expect(banner.indexOf('if(!shouldInitializeBuiltinAds()) return')).toBeLessThan(banner.indexOf('Manager.init()'))
     })
 })
