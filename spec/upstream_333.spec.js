@@ -10,6 +10,7 @@ const torserver = fs.readFileSync(new URL('../src/interaction/torserver.js', imp
 const socket = fs.readFileSync(new URL('../src/core/socket.js', import.meta.url), 'utf8')
 const accountTimeline = fs.readFileSync(new URL('../src/core/account/timeline.js', import.meta.url), 'utf8')
 const storage = fs.readFileSync(new URL('../src/core/storage/storage.js', import.meta.url), 'utf8')
+const storageWorkers = fs.readFileSync(new URL('../src/core/storage/workers.js', import.meta.url), 'utf8')
 const metric = fs.readFileSync(new URL('../src/services/metric.js', import.meta.url), 'utf8')
 
 describe('upstream 3.3.4 integration', ()=>{
@@ -42,6 +43,9 @@ describe('upstream 3.3.4 integration', ()=>{
         expect(accountTimeline).toContain("Api.load('timeline/update'")
         expect(storage).toContain("if(e.method == 'storage')")
         expect(storage).toContain("Api.load('storage/update'")
+        expect(storage).toContain('json: JSON.stringify(e.data.params)')
+        expect(storageWorkers).toContain('this.send_timers = {}')
+        expect(storageWorkers).toContain('this.send_rate   = { count: 0, reset: 0 }')
         expect(metric.match(/if\(!CustomConfig\.cubTelemetryEnabled\) return/g)).toHaveLength(3)
     })
 })
