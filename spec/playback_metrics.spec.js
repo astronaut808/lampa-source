@@ -21,6 +21,9 @@ describe('playback diagnostics', ()=>{
         expect(client).toContain("Lampa.Listener.follow('request_before'")
         expect(client).toContain("Lampa.Player.listener.follow('create'")
         expect(client).toContain("Lampa.PlayerVideo.listener.follow('astronaut:waiting'")
+        expect(client).toContain("Lampa.PlayerVideo.listener.follow('astronaut:command'")
+        expect(client).toContain("Lampa.PlayerVideo.listener.follow('astronaut:engine'")
+        expect(client).toContain('requestVideoFrameCallback')
         expect(client).not.toContain('window.fetch =')
         expect(client).not.toContain('XMLHttpRequest.prototype')
         expect(video).toContain("listener.send('astronaut:loadedmetadata'")
@@ -35,6 +38,8 @@ describe('playback diagnostics', ()=>{
         expect(video).toContain("import DashStream from './video/dash'")
         expect(video).toContain('registerTube: Tube.register')
         expect(video).toContain("listener.send('astronaut:playing'")
+        expect(video).toContain("diagnostic('engine', {engine: 'native_hls'})")
+        expect(video).toContain("diagnostic('command', {action: 'load', reason: 'source', url: src})")
     })
 
     it('exposes same-origin playback collection endpoints', ()=>{

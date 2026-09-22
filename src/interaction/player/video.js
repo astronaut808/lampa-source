@@ -47,6 +47,10 @@ let click_nums = 0
 let click_timer
 let pause_timer
 
+function diagnostic(channel, data){
+    listener.send('astronaut:' + channel, data || {})
+}
+
 
 function init(){
     html      = Template.get('player_video')
@@ -125,6 +129,11 @@ function init(){
 
     Segments.listener.follow('skip', (e) => {
         if(Storage.get('player_segments_' + e.type, 'auto') == 'auto'){
+            diagnostic('command', {
+                action: 'seek',
+                reason: 'segment_skip',
+                value_ms: Math.round(Math.min(video.duration, e.segment.end) * 1000)
+            })
             video.currentTime = Math.min(video.duration, e.segment.end)
 
             Bell.push({text: Lang.translate('player_segments_skiped'), icon: Template.string('icon_viewed')})
@@ -141,6 +150,12 @@ function init(){
  * Добовляем события к контейнеру
  */
 function bind(){
+    ;['play', 'pause', 'seeking', 'seeked', 'ratechange'].forEach(name=>{
+        video.addEventListener(name, function(){
+            diagnostic('media', {name: name})
+        })
+    })
+
     // ждем загрузки
     video.addEventListener("waiting", function (){
         loader(true)
@@ -571,6 +586,7 @@ function loader(status){
     let verify = Tube.verify(src)
   
     if(verify) {
+        diagnostic('engine', {engine: 'youtube'})
         let videobox = verify.create((object) => {
             video = object
         })
@@ -589,6 +605,7 @@ function loader(status){
     create()
 
     if(/\.mpd/.test(src) && typeof dashjs !== 'undefined'){
+        diagnostic('engine', {engine: 'dash.js'})
         DashStream.create(src, video, { load })
     }
     else if(/\.m3u8/.test(src)){
@@ -602,25 +619,37 @@ function loader(status){
             if(!Platform.is('tizen')) console.log('Player', 'can play native hls:', hls_native ? true : false)
 
             if(use_program){
+                diagnostic('engine', {engine: 'hls.js', version: Hls.version || ''})
                 HlsStream.createProgram(src, video, Player.playdata(), {
                     play,
                     load,
                     error: (msg, fatal) => listener.send('error', {error: msg, fatal}),
-                    subtitles: (subs) => listener.send('subs', {subs})
+                    subtitles: (subs) => listener.send('subs', {subs}),
+                    diagnostic: (data) => diagnostic('hls', data)
                 })
             }
             else if(!change_quality && !TV.playning()){
+                diagnostic('engine', {engine: 'native_hls'})
                 HlsStream.createParser(src, Player.playdata(), {
                     load,
                     levels: (levels, current) => listener.send('levels', {levels, current}),
                     translate: (where, translate) => listener.send('translate', {where, translate})
                 })
             }
-            else load(src)
+            else{
+                diagnostic('engine', {engine: 'native_hls'})
+                load(src)
+            }
         }
-        else load(src)
+        else{
+            diagnostic('engine', {engine: 'native_hls'})
+            load(src)
+        }
     }
-    else load(src)
+    else{
+        diagnostic('engine', {engine: 'native'})
+        load(src)
+    }
 }
 
 /**
@@ -632,20 +661,24 @@ function load(src){
 
     DashStream.destroy()
 
+    diagnostic('command', {action: 'load', reason: 'source', url: src})
+
     video.src = src
 
     console.log('Player','video load url:', src)
 
     video.load()
 
-    play()
+    play('source_load')
 }
 
 /**
  * Играем
  */
-function play() {
+function play(reason) {
     try {
+        diagnostic('command', {action: 'play', reason: reason || 'player_api'})
+
         let promise = video.play()
         let call = () => {
             paused.addClass('hide')
@@ -672,8 +705,10 @@ function play() {
 /**
  * Пауза
  */
-function pause(){
+function pause(reason){
     try {
+        diagnostic('command', {action: 'pause', reason: reason || 'player_api'})
+
         let promise = video.pause()
         let call = () => {
             paused.removeClass('hide')
@@ -709,8 +744,8 @@ function pause(){
 function playpause(){
     if(wait || rewind_position) return
 
-    if(video.paused) play()
-    else             pause()
+    if(video.paused) play('toggle')
+    else             pause('toggle')
 }
 
 /**
@@ -721,12 +756,17 @@ function rewindEnd(immediately){
     clearTimeout(timer.rewind_call)
 
     timer.rewind_call = setTimeout(function(){
+        diagnostic('command', {
+            action: 'seek',
+            reason: 'rewind',
+            value_ms: Math.round(rewind_position * 1000)
+        })
         video.currentTime = rewind_position
 
         rewind_position = 0
         rewind_force    = 0
 
-        play()
+        play('rewind')
 
         WebOSManager.rewinded()
     },immediately ? 0 : 1000)
@@ -742,7 +782,7 @@ function rewindStart(position_time,immediately){
 
     rewind_position = Math.max(0, Math.min(position_time, video.duration))
 
-    pause()
+    pause('rewind')
 
     if(rewind_position == 0) video.currentTime = 0
     else if(rewind_position == video.duration) video.currentTime = video.duration
@@ -819,15 +859,20 @@ function speed(value){
  * @param {number} type 
  */
 function to(seconds){
-    pause()
+    pause('seek')
 
     try{
+        diagnostic('command', {
+            action: 'seek',
+            reason: 'direct',
+            value_ms: Math.round((seconds == -1 ? Math.max(0, video.duration - 3) : Math.max(0, Math.min(seconds, video.duration))) * 1000)
+        })
         if(seconds == -1) video.currentTime = Math.max(0,video.duration - 3)
         else video.currentTime              = Math.max(0, Math.min(seconds, video.duration))
     }
     catch(e){}
 
-    play()
+    play('seek')
 }
 
 /**

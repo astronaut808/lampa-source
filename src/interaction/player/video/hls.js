@@ -117,6 +117,15 @@ function createProgram(src, videoEl, playdata, callbacks){
     _hls.on(Hls.Events.ERROR, function(_, data){
         console.log('Player','hls error', data.reason, data.details, data.fatal)
 
+        if(callbacks.diagnostic){
+            callbacks.diagnostic({
+                kind: 'error',
+                reason: data.reason || '',
+                details: data.details || '',
+                fatal: Boolean(data.fatal)
+            })
+        }
+
         if(data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR){
             if(data.reason === "no EXTM3U delimiter"){
                 callbacks.load(src)
@@ -137,6 +146,30 @@ function createProgram(src, videoEl, playdata, callbacks){
     _hls.on(Hls.Events.MANIFEST_PARSED, function(){
         _hls.currentLevel = levelDefault(_hls)
     })
+
+    if(Hls.Events.FRAG_LOADED){
+        _hls.on(Hls.Events.FRAG_LOADED, function(_, data){
+            let stats = data && data.stats || {}
+            let started = Number(stats.trequest) || 0
+            let finished = Number(stats.tload) || 0
+
+            if(callbacks.diagnostic){
+                callbacks.diagnostic({
+                    kind: 'fragment_loaded',
+                    duration_ms: Math.max(0, Math.round(finished - started)),
+                    bytes: Math.max(0, Math.round(Number(stats.loaded || stats.total) || 0))
+                })
+            }
+        })
+    }
+
+    if(Hls.Events.LEVEL_SWITCHED){
+        _hls.on(Hls.Events.LEVEL_SWITCHED, function(_, data){
+            if(callbacks.diagnostic){
+                callbacks.diagnostic({kind: 'level_switched', level: Number(data && data.level) || 0})
+            }
+        })
+    }
 
     _hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function(_event, data){
         if(!data.subtitleTracks || !data.subtitleTracks.length) return

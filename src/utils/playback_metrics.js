@@ -4,7 +4,8 @@ import {
     FRAME_WINDOW_MS,
     sample as mediaSample,
     detectIssue,
-    classifyStall
+    classifyStall,
+    summarizeWindow
 } from './playback_observer'
 
 const PLAYBACK_TIMEOUT = 30000
@@ -17,12 +18,18 @@ const SAMPLE_LIMIT = 30
 const STALL_LIMIT = 20
 const FRAME_FREEZE_LIMIT = 10
 const STALL_REPORT_DELAY = 2000
+const HEARTBEAT_INTERVAL = 30000
+const CONTROL_GRACE_MS = 5000
+const CONTROL_EVENT_LIMIT = 80
+const CHECKPOINT_WINDOW = 30
 
 let attempt = null
 let resolver = null
 let recentRequests = []
 let pendingRequests = []
 let sampleTimer = null
+let heartbeatTimer = null
+let frameObserver = null
 
 function timestamp(){
     return Date.now()
@@ -67,6 +74,30 @@ function safeLabel(value){
     return value.slice(0, 80)
 }
 
+function firstSafeLabel(values){
+    for(let i = 0; i < values.length; i++){
+        let value = safeLabel(values[i])
+
+        if(value) return value
+    }
+
+    return ''
+}
+
+function streamHash(value){
+    if(typeof value !== 'string' || !value) return ''
+
+    try{
+        let link = document.createElement('a')
+            link.href = value
+
+        return hash((link.host || '') + (link.pathname || ''))
+    }
+    catch(e){
+        return ''
+    }
+}
+
 function hash(value){
     let result = 2166136261
 
@@ -104,14 +135,45 @@ function contentInfo(data){
     }
 }
 
+function qualityLabel(data){
+    if(!data) return ''
+    if(typeof data.quality == 'string') return safeLabel(data.quality)
+    if(!data.quality || typeof data.quality !== 'object') return ''
+
+    let names = Object.keys(data.quality)
+
+    for(let i = 0; i < names.length; i++){
+        let option = data.quality[names[i]]
+        let url = typeof option == 'string' ? option : option && option.url
+
+        if(url && url == data.url) return safeLabel(names[i])
+    }
+
+    return ''
+}
+
 function streamInfo(data){
     data = data || {}
 
     return {
         host: hostFromUrl(data.url),
         type: streamType(data.url),
-        provider: safeLabel(data.balancer || data.provider || data.source || data.from || '')
+        provider: firstSafeLabel([data.balancer, data.provider, data.source, data.from]),
+        quality: firstSafeLabel([data.quality_switched, data.quality_label, data.video_quality, qualityLabel(data)]),
+        translation: firstSafeLabel([data.voice_name, data.translation, typeof data.translate == 'string' ? data.translate : '']),
+        source_hash: streamHash(data.url),
+        engine: 'unknown'
     }
+}
+
+function updateStreamInfo(current, data){
+    if(!current || !data) return
+
+    let engine = current.stream.engine
+    let updated = streamInfo(data)
+
+    updated.engine = engine || 'unknown'
+    current.stream = updated
 }
 
 function requestStart(event){
@@ -231,10 +293,110 @@ function videoElement(){
     }
 }
 
+function stopFrameObserver(){
+    if(frameObserver && frameObserver.schedule_timer) clearTimeout(frameObserver.schedule_timer)
+
+    if(
+        frameObserver &&
+        frameObserver.video &&
+        frameObserver.callback_id &&
+        typeof frameObserver.video.cancelVideoFrameCallback === 'function'
+    ){
+        try{ frameObserver.video.cancelVideoFrameCallback(frameObserver.callback_id) }
+        catch(e){}
+    }
+
+    frameObserver = null
+}
+
+function ensureFrameObserver(video, current){
+    if(!video || !current) return null
+    if(frameObserver && frameObserver.video === video) return frameObserver
+
+    stopFrameObserver()
+
+    frameObserver = {
+        video: video,
+        supported: typeof video.requestVideoFrameCallback === 'function',
+        callback_id: 0,
+        schedule_timer: null,
+        frames: 0,
+        last_wall_at: 0,
+        media_time_ms: 0
+    }
+
+    if(!frameObserver.supported) return frameObserver
+
+    let requestNext = ()=>{
+        if(!attempt || !frameObserver || frameObserver.video !== video) return
+
+        try{ frameObserver.callback_id = video.requestVideoFrameCallback(observe) }
+        catch(e){ frameObserver.supported = false }
+    }
+    let observe = (now, metadata)=>{
+        if(!attempt || !frameObserver || frameObserver.video !== video) return
+
+        frameObserver.frames = Math.max(
+            frameObserver.frames + 1,
+            Number(metadata && metadata.presentedFrames) || 0
+        )
+        frameObserver.last_wall_at = timestamp()
+        frameObserver.media_time_ms = Math.max(0, Math.round((Number(metadata && metadata.mediaTime) || 0) * 1000))
+
+        frameObserver.schedule_timer = setTimeout(requestNext, 500)
+    }
+
+    requestNext()
+
+    return frameObserver
+}
+
+function presentationInfo(current, video){
+    let observer = ensureFrameObserver(video, current)
+
+    if(!observer) return {}
+
+    return {
+        supported: observer.supported,
+        frames: observer.frames,
+        media_time_ms: observer.media_time_ms,
+        gap_ms: observer.last_wall_at ? elapsed(observer.last_wall_at) : 0
+    }
+}
+
 function snapshot(current){
     let video = videoElement()
 
-    return video ? mediaSample(video, elapsed(current.started_at)) : null
+    return video ? mediaSample(video, elapsed(current.started_at), {
+        presentation: presentationInfo(current, video),
+        control_active: timestamp() < (current.control_grace_until || 0),
+        hidden: typeof document !== 'undefined' && Boolean(document.hidden)
+    }) : null
+}
+
+function appendControlEvent(current, category, event){
+    if(!current) return
+
+    event = event || {}
+
+    current.control_events.push({
+        at_ms: elapsed(current.started_at),
+        category: safeLabel(category),
+        name: firstSafeLabel([event.action, event.name, event.kind, event.type]),
+        reason: safeLabel(event.reason || ''),
+        value_ms: Math.max(0, Math.round(Number(event.value_ms) || 0)),
+        duration_ms: Math.max(0, Math.round(Number(event.duration_ms) || 0)),
+        level: Math.max(0, Math.round(Number(event.level) || 0)),
+        fatal: Boolean(event.fatal)
+    })
+    current.control_events = current.control_events.slice(-CONTROL_EVENT_LIMIT)
+}
+
+function checkpoint(current){
+    let samples = (current.samples || []).slice(-CHECKPOINT_WINDOW)
+    let summary = summarizeWindow(samples)
+
+    if(summary) current.latest_checkpoint = summary
 }
 
 function diagnostics(current){
@@ -269,6 +431,9 @@ function diagnostics(current){
         sample_interval_ms: SAMPLE_INTERVAL,
         connection: connectionInfo(),
         recent_samples: samples.slice(-SAMPLE_LIMIT),
+        checkpoints: current.latest_checkpoint ? [current.latest_checkpoint] : [],
+        control_events: (current.control_events || []).slice(-CONTROL_EVENT_LIMIT),
+        hls: current.hls || {},
         stalls: stalls,
         frame_freezes: frameFreezes
     }
@@ -363,7 +528,10 @@ function finishFrameFreeze(current, recovered){
 
 function stopSampler(){
     clearInterval(sampleTimer)
+    clearInterval(heartbeatTimer)
     sampleTimer = null
+    heartbeatTimer = null
+    stopFrameObserver()
 }
 
 function recordSample(){
@@ -404,14 +572,18 @@ function startSampler(){
     stopSampler()
     recordSample()
     sampleTimer = setInterval(recordSample, SAMPLE_INTERVAL)
+    heartbeatTimer = setInterval(()=>{
+        if(!attempt || !attempt.marks.playing) return
+
+        checkpoint(attempt)
+        report(attempt, attempt.outcome)
+    }, HEARTBEAT_INTERVAL)
 }
 
 function closeAttempt(outcome){
     if(!attempt) return
 
     clearTimeout(attempt.timeout)
-    stopSampler()
-
     if(attempt.waiting_started){
         attempt.waiting_ms += elapsed(attempt.waiting_started)
         attempt.waiting_started = 0
@@ -419,6 +591,8 @@ function closeAttempt(outcome){
 
     finishStall(attempt, false)
     finishFrameFreeze(attempt, false)
+    checkpoint(attempt)
+    stopSampler()
 
     attempt.outcome = outcome || attempt.outcome
     report(attempt)
@@ -448,6 +622,17 @@ function beginAttempt(data){
         waiting_started: 0,
         stalled_count: 0,
         samples: [],
+        latest_checkpoint: null,
+        control_events: [],
+        control_grace_until: 0,
+        hls: {
+            fragment_loaded_count: 0,
+            error_count: 0,
+            level_switch_count: 0,
+            last_level: 0,
+            last_fragment_duration_ms: 0,
+            last_fragment_bytes: 0
+        },
         stalls: [],
         active_stall: null,
         stall_sequence: 0,
@@ -545,6 +730,72 @@ function onError(event){
     report(attempt)
 }
 
+function onControl(event){
+    if(!attempt) return
+
+    if(event && event.action == 'load' && typeof event.url == 'string'){
+        try{ updateStreamInfo(attempt, Lampa.Player.playdata()) }
+        catch(e){}
+
+        attempt.stream.host = hostFromUrl(event.url)
+        attempt.stream.type = streamType(event.url)
+        attempt.stream.source_hash = streamHash(event.url)
+    }
+
+    appendControlEvent(attempt, 'command', event)
+    attempt.control_grace_until = Math.max(attempt.control_grace_until, timestamp() + CONTROL_GRACE_MS)
+}
+
+function onMediaEvent(event){
+    if(!attempt) return
+
+    appendControlEvent(attempt, 'media', event)
+
+    let name = event && (event.name || event.type)
+
+    if(name == 'pause' || name == 'seeking' || name == 'seeked'){
+        attempt.control_grace_until = Math.max(attempt.control_grace_until, timestamp() + CONTROL_GRACE_MS)
+    }
+}
+
+function onEngine(event){
+    if(!attempt) return
+
+    event = event || {}
+    attempt.stream.engine = firstSafeLabel([event.engine, event.name]) || 'unknown'
+
+    appendControlEvent(attempt, 'engine', {
+        name: attempt.stream.engine,
+        reason: event.version ? 'version-' + safeLabel(String(event.version)) : ''
+    })
+}
+
+function onHlsDiagnostic(event){
+    if(!attempt) return
+
+    event = event || {}
+    let kind = safeLabel(event.kind || '')
+
+    if(kind == 'fragment_loaded'){
+        attempt.hls.fragment_loaded_count++
+        attempt.hls.last_fragment_duration_ms = Math.max(0, Math.round(Number(event.duration_ms) || 0))
+        attempt.hls.last_fragment_bytes = Math.max(0, Math.round(Number(event.bytes) || 0))
+    }
+    else if(kind == 'error'){
+        attempt.hls.error_count++
+        appendControlEvent(attempt, 'hls', {
+            name: firstSafeLabel([event.details, kind]),
+            reason: safeLabel(event.reason || ''),
+            fatal: event.fatal
+        })
+    }
+    else if(kind == 'level_switched'){
+        attempt.hls.level_switch_count++
+        attempt.hls.last_level = Math.max(0, Math.round(Number(event.level) || 0))
+        appendControlEvent(attempt, 'hls', {name: kind, level: event.level})
+    }
+}
+
 function resolverReport(current, outcome){
     report({
         id: current.id,
@@ -612,7 +863,10 @@ function init(){
     Lampa.Listener.follow('astronaut:loading', loadingEvent)
 
     Lampa.Player.listener.follow('create', event=>beginAttempt(event && event.data || {}))
-    Lampa.Player.listener.follow('start', ()=>mark('start'))
+    Lampa.Player.listener.follow('start', data=>{
+        mark('start')
+        updateStreamInfo(attempt, data)
+    })
     Lampa.Player.listener.follow('ready', ()=>mark('ready'))
     Lampa.Player.listener.follow('external', ()=>{
         if(attempt){
@@ -628,6 +882,10 @@ function init(){
     Lampa.PlayerVideo.listener.follow('astronaut:playing', onPlaying)
     Lampa.PlayerVideo.listener.follow('astronaut:waiting', onWaiting)
     Lampa.PlayerVideo.listener.follow('astronaut:stalled', onStalled)
+    Lampa.PlayerVideo.listener.follow('astronaut:command', onControl)
+    Lampa.PlayerVideo.listener.follow('astronaut:media', onMediaEvent)
+    Lampa.PlayerVideo.listener.follow('astronaut:engine', onEngine)
+    Lampa.PlayerVideo.listener.follow('astronaut:hls', onHlsDiagnostic)
     Lampa.PlayerVideo.listener.follow('error', onError)
     Lampa.PlayerVideo.listener.follow('ended', ()=>closeAttempt('ended'))
 }

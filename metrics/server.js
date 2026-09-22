@@ -175,12 +175,53 @@ function normalizePlaybackSample(value){
         height: number(value.height, 16384),
         frame_counters: Boolean(value.frame_counters),
         decoded_frames: number(value.decoded_frames, 1000000000),
-        dropped_frames: number(value.dropped_frames, 1000000000)
+        dropped_frames: number(value.dropped_frames, 1000000000),
+        presentation_supported: Boolean(value.presentation_supported),
+        presented_frames: number(value.presented_frames, 1000000000),
+        presented_media_time_ms: number(value.presented_media_time_ms),
+        presentation_gap_ms: number(value.presentation_gap_ms),
+        presentation_delay_ms: number(value.presentation_delay_ms),
+        control_active: Boolean(value.control_active),
+        hidden: Boolean(value.hidden)
     }
 }
 
 function normalizePlaybackEdge(value){
     return normalizePlaybackSample(value)
+}
+
+function normalizePlaybackCheckpoint(value){
+    if(!value || typeof value !== 'object') return null
+
+    return {
+        at_ms: number(value.at_ms),
+        interval_ms: number(value.interval_ms, 60000),
+        media_time_ms: number(value.media_time_ms),
+        media_advance_ms: number(value.media_advance_ms, 60000),
+        min_buffer_ahead_ms: number(value.min_buffer_ahead_ms),
+        min_ready_state: number(value.min_ready_state, 4),
+        paused_samples: number(value.paused_samples, 1000),
+        seeking_samples: number(value.seeking_samples, 1000),
+        presentation_supported: Boolean(value.presentation_supported),
+        presented_frame_advance: number(value.presented_frame_advance, 1000000),
+        max_presentation_gap_ms: number(value.max_presentation_gap_ms),
+        max_presentation_delay_ms: number(value.max_presentation_delay_ms)
+    }
+}
+
+function normalizePlaybackControlEvent(value){
+    if(!value || typeof value !== 'object') return null
+
+    return {
+        at_ms: number(value.at_ms),
+        category: choice(text(value.category, 20), ['command', 'media', 'engine', 'hls'], ''),
+        name: text(value.name, 50),
+        reason: text(value.reason, 80),
+        value_ms: number(value.value_ms),
+        duration_ms: number(value.duration_ms),
+        level: number(value.level, 1000),
+        fatal: Boolean(value.fatal)
+    }
 }
 
 function normalizePlaybackDiagnostics(value){
@@ -190,6 +231,9 @@ function normalizePlaybackDiagnostics(value){
     let samples = Array.isArray(value.recent_samples) ? value.recent_samples : []
     let stalls = Array.isArray(value.stalls) ? value.stalls : []
     let frameFreezes = Array.isArray(value.frame_freezes) ? value.frame_freezes : []
+    let checkpoints = Array.isArray(value.checkpoints) ? value.checkpoints : []
+    let controlEvents = Array.isArray(value.control_events) ? value.control_events : []
+    let hls = value.hls && typeof value.hls === 'object' ? value.hls : {}
 
     return {
         sample_interval_ms: number(value.sample_interval_ms, 60000),
@@ -200,6 +244,16 @@ function normalizePlaybackDiagnostics(value){
             save_data: Boolean(connection.save_data)
         },
         recent_samples: samples.slice(-30).map(normalizePlaybackSample).filter(Boolean),
+        checkpoints: checkpoints.slice(-120).map(normalizePlaybackCheckpoint).filter(Boolean),
+        control_events: controlEvents.slice(-80).map(normalizePlaybackControlEvent).filter(Boolean),
+        hls: {
+            fragment_loaded_count: number(hls.fragment_loaded_count, 1000000),
+            error_count: number(hls.error_count, 1000000),
+            level_switch_count: number(hls.level_switch_count, 1000000),
+            last_level: number(hls.last_level, 1000),
+            last_fragment_duration_ms: number(hls.last_fragment_duration_ms),
+            last_fragment_bytes: number(hls.last_fragment_bytes, 1000000000)
+        },
         stalls: stalls.slice(-20).map(item=>({
             sequence: number(item && item.sequence, 100000),
             trigger: choice(text(item && item.trigger, 20), ['waiting', 'stalled'], ''),
@@ -208,6 +262,8 @@ function normalizePlaybackDiagnostics(value){
             classification: choice(text(item && item.classification, 50), [
                 'active',
                 'buffer_starvation',
+                'seek_transition',
+                'control_transition',
                 'video_frames_not_advancing',
                 'pipeline_not_advancing_with_buffer',
                 'unknown'
@@ -270,7 +326,18 @@ function normalizePlayback(report){
         stream: {
             host: text(stream.host, 120),
             type: text(stream.type, 30),
-            provider: text(stream.provider, 80)
+            provider: text(stream.provider, 80),
+            quality: text(stream.quality, 40),
+            translation: text(stream.translation, 80),
+            source_hash: text(stream.source_hash, 80),
+            engine: choice(text(stream.engine, 30), [
+                'unknown',
+                'native',
+                'native_hls',
+                'hls.js',
+                'dash.js',
+                'youtube'
+            ], 'unknown')
         },
         timings: normalizeNumbers(report.timings, [
             'loading_ms',
@@ -373,8 +440,28 @@ function summarizePlaybackReports(reports){
     }
 }
 
-function playbackSummary(){
-    return summarizePlaybackReports(playbackHistory)
+function filterPlaybackReports(reports, filters){
+    filters = filters || {}
+
+    let since = Date.parse(filters.since || '')
+    let until = Date.parse(filters.until || '')
+
+    return reports.filter(report=>{
+        let captured = Date.parse(report.captured_at || '')
+
+        if(filters.device && playbackDevice(report) !== filters.device) return false
+        if(filters.engine && (!report.stream || report.stream.engine !== filters.engine)) return false
+        if(filters.host && (!report.stream || report.stream.host !== filters.host)) return false
+        if(filters.source_hash && (!report.stream || report.stream.source_hash !== filters.source_hash)) return false
+        if(Number.isFinite(since) && (!Number.isFinite(captured) || captured < since)) return false
+        if(Number.isFinite(until) && (!Number.isFinite(captured) || captured > until)) return false
+
+        return true
+    })
+}
+
+function playbackSummary(filters){
+    return summarizePlaybackReports(filterPlaybackReports(playbackHistory, filters))
 }
 
 function normalizeCard(report){
@@ -511,11 +598,32 @@ function storeStartup(report){
     return startupHistory.length
 }
 
+function mergePlaybackReport(previous, current){
+    if(!previous || !current) return current
+
+    let previousDiagnostics = previous.diagnostics || {}
+    let currentDiagnostics = current.diagnostics || {}
+    let checkpoints = []
+
+    ;(previousDiagnostics.checkpoints || []).concat(currentDiagnostics.checkpoints || []).forEach(item=>{
+        let existing = checkpoints.findIndex(checkpoint=>checkpoint.at_ms === item.at_ms)
+
+        if(existing >= 0) checkpoints[existing] = item
+        else checkpoints.push(item)
+    })
+
+    currentDiagnostics.checkpoints = checkpoints.sort((a, b)=>a.at_ms - b.at_ms).slice(-120)
+    current.diagnostics = currentDiagnostics
+
+    return current
+}
+
 function storePlayback(report){
     let now = new Date().toISOString()
     let index = playbackHistory.findIndex(item=>item.attempt_id === report.attempt_id)
 
     if(index >= 0){
+        report = mergePlaybackReport(playbackHistory[index], report)
         report.received_at = playbackHistory[index].received_at
         report.updated_at = now
         playbackHistory[index] = report
@@ -677,7 +785,8 @@ function createServer(){
     return http.createServer(async (request, response)=>{
         await initialize()
 
-        let pathname = new URL(request.url, 'http://metrics.local').pathname
+        let requestUrl = new URL(request.url, 'http://metrics.local')
+        let pathname = requestUrl.pathname
 
         if(request.method === 'GET' && (pathname === '/health' || pathname === '/health/live')){
             return respond(response, 200, {
@@ -716,7 +825,16 @@ function createServer(){
             return respond(response, 200, playbackHistory.length ? playbackHistory[playbackHistory.length - 1] : {status: 'waiting_for_first_report'})
         }
         if(request.method === 'GET' && pathname === '/metrics/playback/history') return respond(response, 200, playbackHistory)
-        if(request.method === 'GET' && pathname === '/metrics/playback/summary') return respond(response, 200, playbackSummary())
+        if(request.method === 'GET' && pathname === '/metrics/playback/summary'){
+            return respond(response, 200, playbackSummary({
+                device: requestUrl.searchParams.get('device') || '',
+                engine: requestUrl.searchParams.get('engine') || '',
+                host: requestUrl.searchParams.get('host') || '',
+                source_hash: requestUrl.searchParams.get('source_hash') || '',
+                since: requestUrl.searchParams.get('since') || '',
+                until: requestUrl.searchParams.get('until') || ''
+            }))
+        }
         if(request.method === 'DELETE' && pathname === '/metrics/playback/history'){
             let cleared = playbackHistory.length
 
@@ -821,5 +939,7 @@ module.exports = {
     normalizeNetworkBatch,
     networkSummary,
     summarizePlaybackReports,
-    playbackSummary
+    playbackSummary,
+    filterPlaybackReports,
+    mergePlaybackReport
 }
