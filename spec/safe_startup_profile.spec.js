@@ -60,6 +60,7 @@ describe('safe startup profile', () => {
         expect(config).toContain('cubTelemetryEnabled: false')
         expect(config).toContain('builtinAdsEnabled: false')
         expect(config).toContain('shotsEnabled: false')
+        expect(config).toContain('contentFilteringEnabled: false')
         expect(config).toContain('playbackMetricsEnabled: true')
         expect(config).toContain('cardMetricsEnabled: true')
         expect(config).toContain('networkMetricsEnabled: true')
@@ -72,6 +73,7 @@ describe('safe startup profile', () => {
             LAMPA_CUB_TELEMETRY_ENABLED: 'true',
             LAMPA_BUILTIN_ADS_ENABLED: '1',
             LAMPA_SHOTS_ENABLED: 'on',
+            LAMPA_CONTENT_FILTERING_ENABLED: 'true',
             LAMPA_PLAYBACK_METRICS_ENABLED: 'false',
             LAMPA_CARD_METRICS_ENABLED: 'false',
             LAMPA_NETWORK_METRICS_ENABLED: 'false',
@@ -82,6 +84,7 @@ describe('safe startup profile', () => {
         expect(config).toContain('cubTelemetryEnabled: true')
         expect(config).toContain('builtinAdsEnabled: true')
         expect(config).toContain('shotsEnabled: true')
+        expect(config).toContain('contentFilteringEnabled: true')
         expect(config).toContain('playbackMetricsEnabled: false')
         expect(config).toContain('cardMetricsEnabled: false')
         expect(config).toContain('networkMetricsEnabled: false')

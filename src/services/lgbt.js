@@ -3,12 +3,15 @@ import Utils from '../utils/utils'
 import Cache from '../utils/cache'
 import VPN from '../core/vpn'
 import Arrays from '../utils/arrays'
+import ContentPolicy from '../custom/content_policy'
 
 /**
  * Инициализация DMCA, блокировка карточек к показу по требованию правообладателей
  * @returns {void}
  */
 function init(){
+    if(!ContentPolicy.enabled()) return
+
     if(!window.lampa_settings.disable_features.lgbt){
         Cache.getData('other', 'lgbt', 60 * 24 * 10).then((result)=>{
             if(result && Arrays.isObject(result)) window.lampa_settings.lgbt = result

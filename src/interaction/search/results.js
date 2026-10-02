@@ -8,6 +8,7 @@ import Cache from '../../utils/cache'
 import Router from '../../core/router'
 import Utils from '../../utils/utils'
 import Template from '../template'
+import ContentPolicy from '../../custom/content_policy'
 
 function Results(source){
     let timer,
@@ -111,7 +112,7 @@ function Results(source){
     }
 
     this.dmca = function(result){
-        if(Arrays.isArray(window.lampa_settings.dcma)){
+        if(ContentPolicy.enabled() && Arrays.isArray(window.lampa_settings.dcma)){
             result.forEach((data)=>{
                 data.results = data.results.filter((item)=>{
                     return !window.lampa_settings.dcma.find((b)=>b.id == item.id && b.cat == (item.name ? 'tv' : 'movie'))
@@ -125,7 +126,7 @@ function Results(source){
 
         source.params.card_view = 6
 
-        if(Arrays.isArray(window.lampa_settings.dcma)){
+        if(ContentPolicy.enabled() && Arrays.isArray(window.lampa_settings.dcma)){
             data.results = data.results.filter((item)=>{
                 return !window.lampa_settings.dcma.find((b)=>b.id == item.id && b.cat == (item.name ? 'tv' : 'movie'))
             })

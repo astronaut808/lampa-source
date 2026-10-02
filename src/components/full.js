@@ -22,6 +22,7 @@ import Permit from '../core/account/permit'
 import TMDB from '../core/api/sources/tmdb'
 import VPN from '../core/vpn'
 import Keys from '../core/tmdb/keys'
+import ContentPolicy from '../custom/content_policy'
 
 let components = {
     start: Start,
@@ -151,7 +152,7 @@ function component(object){
 
                 // Проверяем по ключевым словам, есть ли в фильме ЛГБТ тематика
                 let key_tags   = data.movie.keywords ? (data.movie.keywords.results || data.movie.keywords.keywords) : []
-                let lgbt_block = Storage.field('lgbt_content_block') || VPN.is(['ru','by'])
+                let lgbt_block = ContentPolicy.enabled() && (Storage.field('lgbt_content_block') || VPN.is(['ru','by']))
 
                 if(lgbt_block && key_tags && key_tags.find && key_tags.length && window.lampa_settings.lgbt) {
                     Keys.lgbt.forEach(keyword=>{
@@ -164,7 +165,7 @@ function component(object){
                     if(window.lampa_settings.lgbt[data.movie.id + '_' + (data.movie.first_air_date ? 'tv' : 'movie')]) data.movie.lgbt = 'list'
                 }
                 
-                if(data.movie.blocked || data.movie.lgbt) return fail({blocked: true, lgbt: data.movie.lgbt})
+                if(ContentPolicy.blocksCard(data.movie)) return fail({blocked: true, lgbt: data.movie.lgbt})
 
                 // Для плагинов которые используют Activity.active().card
                 object.card = data.movie
@@ -175,7 +176,7 @@ function component(object){
                 // Ищем по ключевым словам, есть ли в фильме тематика для взрослых
                 let adult_block = key_tags && key_tags.find && key_tags.length ? key_tags.find(key=>Keys.adult.find(word=>key.name.toLowerCase().indexOf(word) >= 0)) : false
 
-                if(Storage.field('adult_content_view')) adult_block = false
+                if(!ContentPolicy.sensitiveContentRestricted(Permit.child) || Storage.field('adult_content_view')) adult_block = false
 
                 // Если фильм помечен как для взрослых, то добавляем это в данные фильма
                 if(adult_block) data.movie.adult = true
@@ -375,9 +376,9 @@ function component(object){
         onError: function(status){
             let params  = this.params.empty
             let dmca    = Utils.dcma(this.object.method, this.object.id)
-            let lgbt    = this.props.get('movie') && this.props.get('movie').lgbt
+            let lgbt    = ContentPolicy.enabled() && this.props.get('movie') && this.props.get('movie').lgbt
 
-            if(dmca || status.blocked){
+            if(ContentPolicy.enabled() && (dmca || status.blocked)){
                 params.title  = Lang.translate('dmca_title')
                 params.descr  = Lang.translate('dmca_descr')
                 params.noicon = true

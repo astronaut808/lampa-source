@@ -4,6 +4,7 @@ import Lang from '../core/lang'
 import Manifest from '../core/manifest'
 import Arrays from './arrays'
 import Timer from '../core/timer'
+import ContentPolicy from '../custom/content_policy'
 
 let card_fields = [
     'poster_path',
@@ -805,7 +806,7 @@ function gup( name, url ) {
 }
 
 function dcma(media, id){
-    return window.lampa_settings.dcma && window.lampa_settings.dcma.find(a=>a.cat == media && a.id == id)
+    return ContentPolicy.dmcaMatch(window.lampa_settings.dcma, media, id)
 }
 
 function inputDisplay(value){

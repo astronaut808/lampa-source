@@ -6,12 +6,16 @@ import Player from '../../../interaction/player'
 import Android from '../../../core/android'
 import Platform from '../../../core/platform'
 import Lang from '../../../core/lang'
+import Permit from '../../../core/account/permit'
+import ContentPolicy from '../../../custom/content_policy'
 
 export default {
     onCreate: function(){
         let videos = this.data.videos
 
-        if(!this.data.movie.adult && videos && videos.results.length && !window.lampa_settings.disable_features.trailers){
+        let adult_block = this.data.movie.adult && ContentPolicy.sensitiveContentRestricted(Permit.child)
+
+        if(!adult_block && videos && videos.results.length && !window.lampa_settings.disable_features.trailers){
             this.html.find('.view--trailer').on('hover:enter',()=>{
                 let items = []
 

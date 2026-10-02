@@ -11,6 +11,8 @@ import Keys from '../../core/tmdb/keys'
 import Warning from '../../interaction/warning'
 import Modal from '../../interaction/modal'
 import Storage from '../../core/storage/storage'
+import Permit from '../../core/account/permit'
+import ContentPolicy from '../../custom/content_policy'
 
 class Descriptiopn extends Emit{
     constructor(data) {
@@ -60,8 +62,7 @@ class Descriptiopn extends Emit{
         let key_tags = this.card.keywords ? (this.card.keywords.results || this.card.keywords.keywords) : []
 
         if(key_tags.length && key_tags.find){
-            let tags_filter = key_tags.filter(key=>!Keys.adult.find(tag=>tag.indexOf(key.name.toLowerCase()) >= 0))
-                tags_filter = tags_filter.filter(key=>!Keys.lgbt.find(tag=>tag.indexOf(key.name.toLowerCase()) >= 0))
+            let tags_filter = ContentPolicy.visibleKeywords(key_tags, Keys.adult, Keys.lgbt, Permit.child)
 
             if(tags_filter.length){
                 tags.append(this.tag(Lang.translate('full_keywords'), tags_filter, (key)=>{
@@ -84,7 +85,7 @@ class Descriptiopn extends Emit{
             this.last = e.target
         })
 
-        if(this.card.adult){
+        if(this.card.adult && ContentPolicy.sensitiveContentRestricted(Permit.child)){
             let warning = new Warning({
                 type: 'full-adult',
                 title: Lang.translate('adult_content_title'),

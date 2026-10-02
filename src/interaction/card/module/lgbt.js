@@ -2,9 +2,12 @@ import Template from '../../template'
 import VPN from '../../../core/vpn'
 import Color from '../../../utils/color'
 import Storage from '../../../core/storage/storage'
+import ContentPolicy from '../../../custom/content_policy'
 
 export default {
     onVisible: function(){
+        if(!ContentPolicy.enabled()) return
+
         let lgbt_block = Storage.field('lgbt_content_block') || VPN.is(['ru','by'])
         let lgbt_key   = this.data.id + '_' + (this.data.first_air_date ? 'tv' : 'movie')
         let img        = this.html.find('.card__img')

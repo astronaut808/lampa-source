@@ -5,6 +5,7 @@ import Api from '../../core/api/api'
 import Result from './results'
 import Layer from '../../core/layer'
 import Permit from '../../core/account/permit'
+import ContentPolicy from '../../custom/content_policy'
 
 let stop_keys = [
     'пор',
@@ -182,7 +183,7 @@ function Sources(params = {}){
     this.search = function(query, immediately){
         results.forEach(result => result.cancel())
 
-        if(!stop_keys.find(k=>k == query.toLowerCase().trim())){
+        if(ContentPolicy.searchAllowed(query, stop_keys, Permit.child)){
             last_query = query
 
             this.listener.send('search',{query, immediately})
