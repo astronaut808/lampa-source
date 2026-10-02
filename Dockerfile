@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS builder
+# Only static web assets leave this stage; run npm and tests natively, not under QEMU.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 
