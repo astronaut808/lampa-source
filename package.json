@@ -7,7 +7,7 @@
     "start": "gulp",
     "debug": "gulp debug",
     "build": "gulp build",
-    "test": "vitest",
+    "test": "vitest --dir spec",
     "doc": "gulp doc"
   },
   "author": "unk",
