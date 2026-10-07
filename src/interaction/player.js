@@ -42,6 +42,7 @@ let launch_player
 let wait_for_loading_url = false
 let wait_loading = false
 let is_opened = false
+let retained_pip_transition = null
 
 let viewing = {
     time: 0,
@@ -69,6 +70,12 @@ function init(){
     Disclaimer.init()
     Subtitles.init()
     Error.init()
+
+    // A retained video must not survive a cancelled or external launch.
+    listener.follow('external', cancelPipTransition)
+    listener.follow('destroy', event=>{
+        if(!event.keep_pip) cancelPipTransition()
+    })
 
     html = Template.get('player')
     html.append(Video.render())
@@ -198,11 +205,14 @@ function init(){
         let type = typeof e.item.url
         let call = ()=>{
             let params = Video.saveParams()
+            let keepPip = Boolean(Video.video()) && document.pictureInPictureElement === Video.video() && typeof e.item.url == 'string' && !Video.verifyTube(e.item.url)
 
             // Нужно текущий плейлист сохранить, чтобы после destroy в плеере остался правильный плейлист
             let playlist = Playlist.get()
 
-            destroy()
+            if(keepPip) Video.pause('pip_episode_transition')
+
+            destroy(keepPip)
 
             // Помечаем как продолжение воспроизведения
             e.item.continue_play = true
@@ -248,7 +258,7 @@ function init(){
 
         Storage.set('player_subs_shift_time', '0')
 
-        $('body').append(html)
+        if(!html.parent().length) $('body').append(html)
     })
 
     listener.follow('ready', (data)=>{
@@ -658,11 +668,21 @@ function getUrlQuality(quality, set_better = true){
  */
 
 function play(data){
+    // A plugin may replace playback synchronously while Video.url is starting.
+    if(retained_pip_transition && retained_pip_transition.launching) cancelPipTransition()
+
     let run = true
+    let pipTransition = retained_pip_transition
 
     listener.send('create', {data, abort: () => run = false})
 
-    if(!run) return console.log('Player','play aborted by callback')
+    if(!run){
+        if(pipTransition && retained_pip_transition === pipTransition) destroy()
+
+        return console.log('Player','play aborted by callback')
+    }
+
+    if(pipTransition && retained_pip_transition !== pipTransition) return
 
     console.log('Player','start play')
 
@@ -694,14 +714,40 @@ function play(data){
     }
 
     let lauch = ()=>{
+        if(pipTransition && retained_pip_transition !== pipTransition) return
+
         // Запоминаем текущий объект, чтобы потом можно было получить его в других методах
         work = data
 
         // Если есть реклама, то показываем её, затем запускаем плеер
         Preroll.show(data,()=>{
+            if(pipTransition && retained_pip_transition !== pipTransition) return
+
             listener.send('start', data)
 
-            Video.url(Torserver.toPlayUrl(data.url))
+            if(pipTransition && retained_pip_transition !== pipTransition) return
+
+            try{
+                const url = Torserver.toPlayUrl(data.url)
+
+                // Quality selection and start listeners may replace the initial URL.
+                if(pipTransition && Video.verifyTube(url)){
+                    Video.destroy()
+                    retained_pip_transition = null
+                    pipTransition = null
+                }
+
+                if(pipTransition) pipTransition.launching = true
+
+                Video.url(url, false, pipTransition ? ()=>retained_pip_transition === pipTransition : undefined)
+                if(pipTransition && retained_pip_transition !== pipTransition) return
+                retained_pip_transition = null
+            }
+            catch(error){
+                if(pipTransition && retained_pip_transition === pipTransition) destroy()
+
+                throw error
+            }
 
             toggle()
 
@@ -843,10 +889,23 @@ function loading(status){
     }
 }
 
+/** Release only the pending PiP transition, without closing an external attempt. */
+function cancelPipTransition(){
+    if(!retained_pip_transition) return
+
+    retained_pip_transition = null
+    Video.destroy()
+    html.detach()
+    is_opened = false
+    Background.theme('reset')
+    $('body').removeClass('player--viewing')
+}
+
 /**
  * Уничтожить плеер
  */
-function destroy(){
+function destroy(keepPip){
+    retained_pip_transition = keepPip ? {} : null
     Timeline.destroy()
 
     if(work.viewed) work.viewed(
@@ -868,11 +927,11 @@ function destroy(){
     html.removeClass('player--panel-visible')
     html.removeClass('player--loading')
 
-    Video.destroy()
+    Video.destroy(false, keepPip)
 
     Video.clearParamas()
 
-    html.detach()
+    if(!keepPip) html.detach()
 
     is_opened = false
 
@@ -882,7 +941,7 @@ function destroy(){
 
     if(Select.opened()) Select.hide()
 
-    listener.send('destroy',{})
+    listener.send('destroy',{keep_pip: Boolean(keepPip)})
 }
 
 export default {

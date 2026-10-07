@@ -35,6 +35,8 @@ let rewind_position = 0
 let rewind_force    = 0
 
 let video
+let retainedPipVideo = false
+let sourceGeneration = 0
 let wait
 let need_scale
 let need_scale_last
@@ -522,6 +524,12 @@ function subsview(status){
  * Создать контейнер для видео
  */
 function create(){
+    if(retainedPipVideo){
+        retainedPipVideo = false
+        WebOSManager.setup()
+        return
+    }
+
     let videobox
     
     if(Platform.is('tizen') && Storage.field('player') == 'tizen'){
@@ -577,14 +585,21 @@ function loader(status){
  * Устанавливаем ссылку на видео
  * @param {string} src - ссылка на видео
  * @param {boolean} change_quality - указывает что меняем качество, нужно для hlsjs, чтобы не создавать парсер заново
+ * @param {function} isCurrent - проверка отмены синхронного перехода между сериями в PiP
  */
- function url(src, change_quality){
+ function url(src, change_quality, isCurrent){
+    const current = ()=>!isCurrent || isCurrent()
+    if(!current()) return
+    sourceGeneration++
+
     loader(true)
 
     let verify = Tube.verify(src)
+    if(!current()) return
   
     if(verify) {
         diagnostic('engine', {engine: 'youtube'})
+        if(!current()) return
         let videobox = verify.create((object) => {
             video = object
         })
@@ -604,6 +619,7 @@ function loader(status){
 
     if(/\.mpd/.test(src) && typeof dashjs !== 'undefined'){
         diagnostic('engine', {engine: 'dash.js'})
+        if(!current()) return
         DashStream.create(src, video, { load })
     }
     else if(/\.m3u8/.test(src)){
@@ -618,6 +634,7 @@ function loader(status){
 
             if(use_program){
                 diagnostic('engine', {engine: 'hls.js', version: Hls.version || ''})
+                if(!current()) return
                 HlsStream.createProgram(src, video, Player.playdata(), {
                     play,
                     load,
@@ -628,6 +645,7 @@ function loader(status){
             }
             else if(!change_quality && !TV.playning()){
                 diagnostic('engine', {engine: 'native_hls'})
+                if(!current()) return
                 HlsStream.createParser(src, Player.playdata(), {
                     load,
                     levels: (levels, current) => listener.send('levels', {levels, current}),
@@ -636,16 +654,19 @@ function loader(status){
             }
             else{
                 diagnostic('engine', {engine: 'native_hls'})
+                if(!current()) return
                 load(src)
             }
         }
         else{
             diagnostic('engine', {engine: 'native_hls'})
+            if(!current()) return
             load(src)
         }
     }
     else{
         diagnostic('engine', {engine: 'native'})
+        if(!current()) return
         load(src)
     }
 }
@@ -655,11 +676,14 @@ function loader(status){
  * @param {string} src 
  */
 function load(src){
+    const generation = sourceGeneration
+
     HlsStream.destroyParser()
 
     DashStream.destroy()
 
     diagnostic('command', {action: 'load', reason: 'source', url: src})
+    if(generation !== sourceGeneration) return
 
     video.src = src
 
@@ -675,7 +699,9 @@ function load(src){
  */
 function play(reason) {
     try {
+        const generation = sourceGeneration
         diagnostic('command', {action: 'play', reason: reason || 'player_api'})
+        if(generation !== sourceGeneration) return
 
         let promise = video.play()
         let call = () => {
@@ -885,9 +911,10 @@ function enterToPIP(){
 /**
  * Выключить режим PIP
  */
-function exitFromPIP(){
-    if (document.pictureInPictureElement) {
-        document.exitPictureInPicture()
+async function exitFromPIP(){
+    if(document.pictureInPictureElement && typeof document.exitPictureInPicture === 'function'){
+        try{ await document.exitPictureInPicture() }
+        catch(error){}
     }
 }
 
@@ -915,8 +942,11 @@ function volume(vol){
 /**
  * Уничтожить
  * @param {boolean} savemeta - сохранить с параметрами
+ * @param {boolean} keepPip - сохранить видеоэлемент при смене серии в PiP
  */
-function destroy(savemeta){
+function destroy(savemeta, keepPip){
+    sourceGeneration++
+
     subsview(false)
 
     need_scale = false
@@ -930,9 +960,9 @@ function destroy(savemeta){
     let hls_destoyed  = HlsStream.destroy()
     let dash_destoyed = DashStream.destroy()
 
-    exitFromPIP()
+    if(!keepPip) exitFromPIP()
 
-    if(video && !(hls_destoyed || dash_destoyed)){
+    if(video && !keepPip && !(hls_destoyed || dash_destoyed)){
         if(video.destroy) video.destroy()
         else{
             video.removeAttribute('src')
@@ -941,12 +971,13 @@ function destroy(savemeta){
         }
     }
 
-    if(normalization){
+    if(normalization && !keepPip){
         normalization.destroy()
         normalization = false
     }
 
-    display.empty()
+    if(!keepPip) display.empty()
+    retainedPipVideo = Boolean(keepPip)
 
     loader(false)
 
