@@ -121,8 +121,18 @@ function task(call){
         if(call) call()
     }
 
-    check(Manifest.cub_alive, (answered)=>{
-        console.log('Mirrors', 'first check:', Manifest.cub_alive, 'status:', answered)
+    const domain = Manifest.cub_domain
+    let alive = Manifest.cub_alive
+
+    // При смене домена не проверяем старое зеркало; рабочий HTTP сохраняем.
+    if(alive !== 'https://' + domain && alive !== 'http://' + domain){
+        alive = 'https://' + domain
+
+        Storage.set('cub_alive', alive, true)
+    }
+
+    check(alive, (answered)=>{
+        console.log('Mirrors', 'first check:', alive, 'status:', answered)
 
         if(answered){
             if(call) call()
