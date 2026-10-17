@@ -13,10 +13,10 @@ const storage = fs.readFileSync(new URL('../src/core/storage/storage.js', import
 const storageWorkers = fs.readFileSync(new URL('../src/core/storage/workers.js', import.meta.url), 'utf8')
 const metric = fs.readFileSync(new URL('../src/services/metric.js', import.meta.url), 'utf8')
 
-describe('upstream 3.3.4 integration', ()=>{
+describe('upstream integration', ()=>{
     it('reports the upstream application and stylesheet version', ()=>{
-        expect(manifest).toContain("css_version: '3.3.4'")
-        expect(manifest).toContain("app_version: '3.3.4'")
+        expect(manifest).toContain("css_version: '3.3.6'")
+        expect(manifest).toContain("app_version: '3.3.7'")
     })
 
     it('uses the public player volume API', ()=>{

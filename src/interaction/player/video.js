@@ -70,7 +70,7 @@ function init(){
     html.on('click',(e)=>{
         if(DeviceInput.canClick(e.originalEvent)){
             clearTimeout(click_timer)
-            
+
             click_nums++
 
             if(TV.playning()) click_nums = 1
@@ -103,7 +103,7 @@ function init(){
                     else if (dir == -1){
                         backworkIcon.addClass('rewind').find('span').text('-' + pow + ' sec')
                         to(video.currentTime + dir * pow)
-                    } 
+                    }
                     else if(Utils.canFullScreen()){
                         Utils.toggleFullscreen()
                     }
@@ -111,7 +111,7 @@ function init(){
                     click_nums = 0
                 }, 300)
             }
-        } 
+        }
     })
 
     Lampa.Listener.follow('resize_end', ()=>{
@@ -121,7 +121,7 @@ function init(){
             scale()
 
             if(video.resize) video.resize()
-        } 
+        }
     })
 
     Tube.register({
@@ -209,7 +209,7 @@ function bind(){
             else if(typeof error.code !== 'undefined'){
                 listener.send('error', {error: 'code ['+error.code+'] details ['+msg+']', fatal: true})
             }
-        } 
+        }
     })
 
     // прогресс буферизации
@@ -283,9 +283,9 @@ function bind(){
 
 
 /**
- * Конвертировать object to array, 
+ * Конвертировать object to array,
  * в некоторых случаях video возвращает object вместо array
- * @param {object[]} arr 
+ * @param {object[]} arr
  * @returns {array}
  */
 function convertToArray(arr){
@@ -358,7 +358,7 @@ function scale(){
 
     sx = sx.toFixed(2)
     sy = sy.toFixed(2)
-    
+
     // Для некоторых платформ, где видео не масштабируется, а растягивается
     if((Platform.is('orsay') && Storage.field('player') == 'inner') || Storage.field('player_scale_method') == 'calculate'){
         var nw = vw * rt,
@@ -379,7 +379,7 @@ function scale(){
             objectFit: need_scale == 'fill' ? 'fill' : 'contain'
         }
     }
-    
+
     $(video).css(sz)
 
     need_scale = false
@@ -413,7 +413,7 @@ function saveParams(){
         for(let i = 0; i < subs.length; i++){
             if(subs[i].enabled == true || subs[i].selected == true){
                 params.sub = subs[i].index
-            } 
+            }
         }
     }
 
@@ -437,7 +437,7 @@ function clearParamas(){
 
 /**
  * Загрузитьновое состояние из прошлого
- * @param {{sub:integer, track:integer, level:integer}} saved_params 
+ * @param {{sub:integer, track:integer, level:integer}} saved_params
  */
 function setParams(saved_params){
     params = saved_params
@@ -480,7 +480,7 @@ function loaded(){
 
     if(subs.length){
         subs = convertToArray(subs)
-        
+
         if(typeof params.sub !== 'undefined' && subs[params.sub]){
             subs.forEach(e=>{e.mode = 'disabled'; e.selected = false})
 
@@ -513,7 +513,7 @@ function loaded(){
 
 /**
  * Включить или выключить субтитры
- * @param {boolean} status 
+ * @param {boolean} status
  */
 function subsview(status){
     html.find('.player-video__subtitles').toggleClass('hide', !Boolean(status))
@@ -531,7 +531,7 @@ function create(){
     }
 
     let videobox
-    
+
     if(Platform.is('tizen') && Storage.field('player') == 'tizen'){
         videobox = Tizen((object)=>{
             video = object
@@ -573,7 +573,7 @@ function create(){
 
 /**
  * Показать згразку или нет
- * @param {boolean} status 
+ * @param {boolean} status
  */
 function loader(status){
     wait = status
@@ -673,7 +673,7 @@ function loader(status){
 
 /**
  * Начать загрузку
- * @param {string} src 
+ * @param {string} src
  */
 function load(src){
     const generation = sourceGeneration
@@ -847,7 +847,7 @@ function rewind(forward, custom_step){
 
         if(forward && skip && !skip.segment.skiped && Storage.get('player_segments_' + skip.type) == 'user'){
             rewind_position = Math.min(video.duration, skip.segment.end)
-            
+
             skip.segment.skiped = true
         }
 
@@ -879,8 +879,8 @@ function speed(value){
 }
 
 /**
- * Перемотка на позицию 
- * @param {number} type 
+ * Перемотка на позицию
+ * @param {number} type
  */
 function to(seconds){
     pause('seek')

@@ -165,6 +165,9 @@ function getAnyPreroll(first_run = false){
  * @return {void}
  */
 function show(data, call){
+    // The runtime opt-out also covers extension-provided VAST URLs.
+    if(!shouldInitializeBuiltinAds()) return call()
+
     player_data = data
 
     prerolls_played = []

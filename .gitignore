@@ -17,6 +17,7 @@ node_modules/
 svg/
 temp/
 .idea/
+.claude/
 src/utils/api/okko.js
 .DS_Store
 .env
@@ -25,3 +26,6 @@ src/utils/api/okko.js
 *.pem
 *.key
 deploy/secrets/
+DECISIONS.md
+PROGRESS.md
+TASKS.md

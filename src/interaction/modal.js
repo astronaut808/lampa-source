@@ -11,7 +11,10 @@ let html,
     active,
     scroll,
     last,
+    win,
     opened = false
+
+let stack = []
 
 let listener = Subscribe()
 
@@ -33,6 +36,16 @@ let listener = Subscribe()
  * @returns {void}
  */
 function open(params){
+    // Окно поверх открытого окна: прячем нижнее и запоминаем его, close() вернёт его обратно
+    if(opened){
+        html.addClass('hide')
+
+        stack.push({html, active, scroll, last, win})
+
+        last = false
+        win  = null
+    }
+
     active = params
     active.open_time = Date.now()
 
@@ -88,6 +101,10 @@ function open(params){
     max()
 
     listener.send('fullshow', {active, html})
+
+    let frame_html = html[0]
+
+    win = Controller.windowOpen('modal', ()=>document.body.contains(frame_html))
 
     toggle(params.select)
 
@@ -182,6 +199,12 @@ function roll(direction){
 
 
 function toggle(need_select){
+    register(need_select)
+
+    Controller.toggle('modal')
+}
+
+function register(need_select){
     Controller.add('modal',{
         invisible: true,
         toggle: ()=>{
@@ -219,8 +242,6 @@ function toggle(need_select){
             if(active.onBack) active.onBack()
         }
     })
-    
-    Controller.toggle('modal')
 }
 
 function update(new_html){
@@ -246,19 +267,79 @@ function title(tit){
 }
 
 function destroy(){
+    let closed = active
+
     last = false
 
     scroll.destroy()
 
     html.remove()
 
-    listener.send('close', {active})
-
     opened = false
+
+    return closed
 }
 
 function close(){
-    destroy()
+    if(!opened) return
+
+    let closed = win
+
+    let closed_active = destroy()
+
+    win = null
+
+    if(stack.length){
+        let frame = stack.pop()
+
+        html   = frame.html
+        active = frame.active
+        scroll = frame.scroll
+        last   = frame.last
+        win    = frame.win
+
+        html.removeClass('hide')
+
+        opened = true
+
+        register()
+    }
+
+    if(closed) Controller.windowClose(closed)
+
+    // Observers may synchronously open another modal. Publish only after the
+    // closed frame is fully removed and its parent has been restored.
+    listener.send('close', {active: closed_active})
+}
+
+/**
+ * Закрывает все открытые окна без вызова onBack
+ * @returns {void}
+ */
+function closeAll(){
+    let closed = []
+    let frames = stack
+
+    stack = []
+
+    while(frames.length){
+        let frame = frames.pop()
+
+        frame.scroll.destroy()
+        frame.html.remove()
+
+        if(frame.win) Controller.windowClose(frame.win, true)
+
+        closed.push(frame.active)
+    }
+
+    if(win) Controller.windowClose(win, true)
+
+    win = null
+
+    if(opened) closed.push(destroy())
+
+    closed.forEach(active=>listener.send('close', {active}))
 }
 
 function render(){
@@ -269,6 +350,7 @@ export default {
     listener,
     open,
     close,
+    closeAll,
     update,
     title,
     toggle,

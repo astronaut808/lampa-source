@@ -36,3 +36,18 @@ test('timeline is sent to the server as data only', ()=>{
     expect(sent).toEqual({hash: 1608884677, percent: 95, time: 2498.5, duration: 2630, profile: 1, updated: 1})
     expect(called).toBe(0)
 })
+
+test('optional card identity is synchronized without invoking extension callbacks', ()=>{
+    Api.load.mockClear()
+    AccountTimeline.init()
+    const handler = vi.fn()
+    socket.listeners.send({method: 'timeline', data: {params: {
+        hash: 1234, percent: 50, time: 50, duration: 100, profile: 1, updated: 2,
+        card: 'tv_42', season: 2, episode: 3, handler
+    }}})
+    expect(Api.load.mock.calls[0][2]).toEqual({
+        hash: 1234, percent: 50, time: 50, duration: 100, profile: 1, updated: 2,
+        card: 'tv_42', season: 2, episode: 3
+    })
+    expect(handler).not.toHaveBeenCalled()
+})
