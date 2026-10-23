@@ -15,8 +15,8 @@ const metric = fs.readFileSync(new URL('../src/services/metric.js', import.meta.
 
 describe('upstream integration', ()=>{
     it('reports the upstream application and stylesheet version', ()=>{
-        expect(manifest).toContain("css_version: '3.3.6'")
-        expect(manifest).toContain("app_version: '3.3.7'")
+        expect(manifest).toContain("css_version: '3.3.8'")
+        expect(manifest).toContain("app_version: '3.3.8'")
     })
 
     it('uses the public player volume API', ()=>{

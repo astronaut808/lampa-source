@@ -19,6 +19,10 @@ import CustomConfig from '../../../custom/config'
 
 
 let network   = new Reguest()
+let network_released = new Reguest()
+let released_dates   = {} // id фильма → {date: дата первого домашнего релиза или '', time}
+let released_waiting = {} // id фильма → колбэки, которые ждут ответ
+let released_generation = 0
 let menu_list = []
 let day       = 60 * 24
 let source    = 'tmdb'
@@ -98,6 +102,144 @@ let keywords = {
         {id: 470, title: '#{filter_keyword_spy}'},
         {id: 10617, title: '#{filter_keyword_disaster}'}
     ]
+}
+
+/**
+ * Дата в формате TMDB
+ * @param {number} time
+ * @return {string} YYYY-MM-DD
+ */
+function dateString(time){
+    let d = new Date(time)
+
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2)
+}
+
+/**
+ * Запрос для «Сейчас смотрят». С настройкой «Показывать только релизы» — только фильмы, которые уже вышли
+ * в цифре, на дисках или на ТВ за последние 90 дней, без тех, что идут только в кинотеатрах.
+ * @param {string} fallback - запрос, если настройка выключена
+ * @return {string}
+ */
+function nowPlaying(fallback){
+    if(!Storage.field('tmdb_only_released')) return fallback
+
+    let now = Date.now()
+
+    return 'discover/movie?with_release_type=4|5|6&release_date.lte=' + dateString(now) + '&release_date.gte=' + dateString(now - 1000 * 60 * 60 * 24 * 90) + '&sort_by=popularity.desc'
+}
+
+/**
+ * Дата первого домашнего релиза фильма (цифра, диски, ТВ)
+ * @param {number} id
+ * @param {function} done - дата, '' если домашнего релиза нет, null при ошибке
+ */
+function releaseDate(id, done){
+    let cached = released_dates[id]
+
+    // «Нет релиза» перепроверяем раз в сутки, найденную дату — нет
+    if(cached && (cached.date || cached.time > Date.now() - 1000 * 60 * 60 * 24)) return done(cached.date)
+
+    if(released_waiting[id]) return released_waiting[id].push(done)
+
+    let calls = released_waiting[id] = [done]
+
+    let finish = (date)=>{
+        // A response from a cancelled activity must not finish a newer request for the same id.
+        if(released_waiting[id] !== calls) return
+
+        delete released_waiting[id]
+
+        if(date !== null) released_dates[id] = {date: date, time: Date.now()}
+
+        calls.forEach(call=>call(date))
+    }
+
+    network_released.timeout(1000 * 10)
+    network_released.silent(TMDB.api('movie/' + id + '/release_dates?api_key=' + TMDB.key()), (json)=>{
+        if(!json || !Arrays.isArray(json.results)) return finish(null)
+
+        let dates = []
+
+        json.results.forEach(country=>{
+            if(!country || !Arrays.isArray(country.release_dates)) return
+
+            country.release_dates.forEach(release=>{
+                if(release && release.type >= 4 && release.type <= 6 && typeof release.release_date == 'string') dates.push(release.release_date.slice(0, 10))
+            })
+        })
+
+        dates.sort()
+
+        finish(dates[0] || '')
+    }, ()=>{
+        finish(null)
+    }, false, {
+        cache: {life: day}
+    })
+}
+
+/**
+ * Убрать из списка то, что ещё нельзя посмотреть дома: сериалы до премьеры, фильмы до премьеры
+ * и фильмы, которые идут только в кинотеатрах. Поиск, актёров и «Смотрите в кинозалах» не трогаем.
+ * @param {string} method - метод запроса
+ * @param {object} json - исходный ответ TMDB, кэш не изменяется
+ * @param {function} call - получает отфильтрованный ответ
+ */
+function releasedFilter(method, json, call){
+    if(!Storage.field('tmdb_only_released')) return call(json)
+
+    if(!(json.results && Arrays.isArray(json.results)) || /^(search|person)\/|^movie\/upcoming|\/videos/.test(method)) return call(json)
+
+    // Filtering must not modify a cached response used later with the option disabled.
+    let filtered = Object.assign({}, json)
+    let generation = released_generation
+
+    let now    = Date.now()
+    let today  = dateString(now)
+    let border = dateString(now - 1000 * 60 * 60 * 24 * 180) // старше — считаем вышедшим, у старых фильмов часто нет домашних дат
+    let home   = method.indexOf('with_release_type=4') >= 0  // запрос уже отобрал вышедшие дома
+    let check  = []
+
+    filtered.results = json.results.filter(item=>{
+        let type = item.media_type || (item.hasOwnProperty('first_air_date') ? 'tv' : item.hasOwnProperty('release_date') ? 'movie' : '')
+
+        if(type == 'tv') return Boolean(item.first_air_date && item.first_air_date <= today)
+
+        if(type == 'movie'){
+            if(!item.release_date || item.release_date > today) return false
+
+            if(!home && item.release_date > border) check.push(item)
+        }
+
+        return true
+    })
+
+    if(!check.length) return call(filtered)
+
+    let status = new Status(check.length)
+
+    status.onComplite = (result)=>{
+        if(generation !== released_generation) return
+
+        // При ошибке сети фильм показываем
+        filtered.results = filtered.results.filter(item=>{
+            // Movie and TV ids have separate namespaces in mixed TMDB lists.
+            if(check.indexOf(item) < 0) return true
+
+            let date = result[item.id]
+
+            return date === undefined || date === null || Boolean(date && date <= today)
+        })
+
+        call(filtered)
+    }
+
+    check.forEach(item=>{
+        releaseDate(item.id, (date)=>{
+            status.append(item.id, date)
+        })
+    })
 }
 
 function url(u, params = {}){
@@ -180,7 +322,9 @@ function get(method, params = {}, oncomplite, onerror, cache = false){
             })
         }
 
-        oncomplite(Utils.addSource(json, source))
+        releasedFilter(method, json, (filtered)=>{
+            oncomplite(Utils.addSource(filtered, source))
+        })
     }, ()=>{
         // Если сезон не найден, то пробуем найти правильный сезон из 1го сезона
         if(s) seasonFix(parseInt(s[2]), method, params = {}, oncomplite, onerror, cache)
@@ -252,7 +396,7 @@ function main(params = {}, oncomplite, onerror){
     let parts_limit = CustomConfig.fastStartupEnabled ? 3 : 6
     let parts_data  = [
         (call)=>{
-            get('movie/now_playing',params,(json)=>{
+            get(nowPlaying('movie/now_playing'),params,(json)=>{
                 json.title = Lang.translate('title_now_watch')
 
                 call(json)
@@ -372,7 +516,7 @@ function category(params = {}, oncomplite, onerror){
     let parts_data  = [
         (call)=>{
             if(params.url == 'movie'){
-                get('discover/' + params.url + '?with_release_type=1',params,(json)=>{
+                get(nowPlaying('discover/' + params.url + '?with_release_type=1'),params,(json)=>{
                     json.title = Lang.translate('title_now_watch')
 
                     call(json)
@@ -671,11 +815,19 @@ function videos(params = {}, oncomplite, onerror){
     }
 }
 
-function list(params = {}, oncomplite, onerror){
+function list(params = {}, oncomplite, onerror, attempt = 0){
     let u = url(params.url, params)
 
     network.silent(u, (data)=>{
-        oncomplite(Utils.addSource(data, source))
+        releasedFilter(params.url, data, (filtered)=>{
+            // Если фильтр убрал всю страницу, берём следующую, иначе пагинация остановится
+            if(Storage.field('tmdb_only_released') && filtered.results && !filtered.results.length && attempt < 5 && params.page && params.page < filtered.total_pages){
+                params.page++
+
+                list(params, oncomplite, onerror, attempt + 1)
+            }
+            else oncomplite(Utils.addSource(filtered, source))
+        })
     }, onerror, false, {
         cache: {life: day * 2}
     })
@@ -866,7 +1018,7 @@ function menuCategory(params, oncomplite){
     if(params.action !== 'tv'){
         menu.push({
             title: Lang.translate('title_now_watch'),
-            url: params.action+'/now_playing'
+            url: nowPlaying(params.action+'/now_playing')
         })
     }
 
@@ -1286,7 +1438,10 @@ function getGenresNameFromIds(card_type, ids){
 }
 
 function clear(){
+    released_generation++
     network.clear()
+    network_released.clear()
+    released_waiting = {}
 }
 
 export default {

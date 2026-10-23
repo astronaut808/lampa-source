@@ -129,6 +129,8 @@ export default {
     settings_rest_tmdb_lang:  'Język danych z TMDB',
     settings_rest_tmdb_prox:  'Proxy dla TMDB',
     settings_rest_tmdb_prox_auto:  'Automatycznie włącz proxy',
+    settings_rest_tmdb_only_released: 'Pokazuj tylko wydane',
+    settings_rest_tmdb_only_released_descr: 'Ukryj filmy, które są jeszcze tylko w kinach, oraz seriale przed premierą',
     settings_rest_tmdb_posters:  'Rozdzielczość plakatów TMDB',
     settings_rest_screensaver:  'Wygaszacz ekranu',
     settings_rest_screensaver_use:  'Pokazuj wygaszacz podczas bezczynności',
@@ -1211,6 +1213,9 @@ export default {
     extensions_hpu_video:  'Wideo',
     extensions_hpu_control:  'Sterowanie',
     extensions_hpu_other:  'Różne',
+    extensions_price_free: 'Darmowe',
+    extensions_price_shareware: 'Częściowo darmowe',
+    extensions_price_paid: 'Płatne',
     extensions_hpu_:  'Pozostałe',
 
     speedtest_connect:  'łączenie',

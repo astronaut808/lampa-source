@@ -1,6 +1,5 @@
 import Utils from '../utils/utils'
 import Manifest from '../core/manifest'
-import Platform from '../core/platform'
 import CustomConfig from '../custom/config'
 
 /**

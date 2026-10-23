@@ -129,6 +129,8 @@ export default {
     settings_rest_tmdb_lang: 'На каком языке отображать данные с TMDB',
     settings_rest_tmdb_prox: 'Проксировать TMDB',
     settings_rest_tmdb_prox_auto: 'Включить прокси автоматически',
+    settings_rest_tmdb_only_released: 'Показывать только релизы',
+    settings_rest_tmdb_only_released_descr: 'Скрывать фильмы, которые ещё идут только в кинотеатрах, и сериалы до премьеры',
     settings_rest_tmdb_posters: 'Разрешение постеров TMDB',
     settings_rest_screensaver: 'Скринсейвер',
     settings_rest_screensaver_use: 'Показывать заставку при бездействии',
@@ -1233,6 +1235,9 @@ export default {
     extensions_hpu_video: 'Видео',
     extensions_hpu_control: 'Управление',
     extensions_hpu_other: 'Разное',
+    extensions_price_free: 'Бесплатно',
+    extensions_price_shareware: 'Условно бесплатно',
+    extensions_price_paid: 'Платно',
     extensions_hpu_: 'Остальное',
 
     speedtest_connect: 'подключение',

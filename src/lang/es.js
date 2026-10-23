@@ -129,6 +129,8 @@ export default {
     settings_rest_tmdb_lang: 'Idioma de los datos de TMDB',
     settings_rest_tmdb_prox: 'Proxy TMDB',
     settings_rest_tmdb_prox_auto: 'Activar el proxy automáticamente',
+    settings_rest_tmdb_only_released: 'Mostrar solo estrenos disponibles',
+    settings_rest_tmdb_only_released_descr: 'Ocultar películas que aún están solo en cines y series antes del estreno',
     settings_rest_tmdb_posters: 'Resolución de los pósteres de TMDB',
     settings_rest_screensaver: 'Salvapantallas',
     settings_rest_screensaver_use: 'Mostrar salvapantallas en reposo',
@@ -1231,6 +1233,9 @@ export default {
     extensions_hpu_video: 'Vídeo',
     extensions_hpu_control: 'Control',
     extensions_hpu_other: 'Varios',
+    extensions_price_free: 'Gratis',
+    extensions_price_shareware: 'Freemium',
+    extensions_price_paid: 'De pago',
     extensions_hpu_: 'Otros',
 
     speedtest_connect: 'conexión',
