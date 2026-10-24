@@ -9,6 +9,7 @@ import ClassExtension from './extension'
 import ClassRecomend from './recomend'
 import ClassTheme from './theme'
 import ClassScreensaver from './screensaver'
+import ClassStore from './store'
 
 class Line{
     constructor(data, params){
@@ -63,6 +64,7 @@ class Line{
         if(this.params.hpu == 'recomend')    Class = ClassRecomend
         if(this.params.hpu == 'theme')       Class = ClassTheme
         if(this.params.hpu == 'screensaver') Class = ClassScreensaver
+        if(this.params.card == 'store')      Class = ClassStore
 
         let item = new Class(elem, this.params)
 

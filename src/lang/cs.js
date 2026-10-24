@@ -128,6 +128,8 @@ export default {
     settings_rest_tmdb_lang: "V jakém jazyce zobrazovat data z TMDB",
     settings_rest_tmdb_prox: "Proxy TMDB",
     settings_rest_tmdb_prox_auto: "Automaticky zapnout proxy",
+    settings_rest_tmdb_only_released: "Zobrazovat jen vydané",
+    settings_rest_tmdb_only_released_descr: "Skrýt filmy, které jsou zatím jen v kinech, a seriály před premiérou",
     settings_rest_tmdb_posters: "Rozlišení plakátů TMDB",
     settings_rest_screensaver: "Spořič obrazovky",
     settings_rest_screensaver_use: "Zobrazit spořič při nečinnosti",
@@ -1120,6 +1122,9 @@ export default {
     extensions_hpu_video: "Video",
     extensions_hpu_control: "Ovládání",
     extensions_hpu_other: "Různé",
+    extensions_price_free: 'Zdarma',
+    extensions_price_shareware: 'Částečně zdarma',
+    extensions_price_paid: 'Placené',
     extensions_hpu_: "Ostatní",
 
     speedtest_connect: "připojení",
