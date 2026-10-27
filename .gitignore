@@ -29,3 +29,5 @@ deploy/secrets/
 DECISIONS.md
 PROGRESS.md
 TASKS.md
+playwright-report/
+test-results/

@@ -1,5 +1,6 @@
 import Utils from '../utils/utils'
 import Manifest from '../core/manifest'
+import CustomConfig from '../custom/config'
 
 let events = [
     {
@@ -32,6 +33,8 @@ let events = [
 ]
 
 function init(){
+    // Remote seasonal plugins can contain promotional UI outside the VAST lifecycle.
+    if(!CustomConfig.seasonalEventsEnabled || !CustomConfig.builtinAdsEnabled) return
     if(!window.lampa_settings.services) return
 
     events.forEach((event) => {

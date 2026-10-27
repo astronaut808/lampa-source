@@ -14,3 +14,5 @@ docs
 *.pem
 *.key
 deploy/secrets
+playwright-report
+test-results

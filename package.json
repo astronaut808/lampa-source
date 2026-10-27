@@ -8,11 +8,13 @@
     "debug": "gulp debug",
     "build": "gulp build",
     "test": "vitest --dir spec",
+    "test:browser": "playwright test",
     "doc": "gulp doc"
   },
   "author": "unk",
   "license": "ISC",
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@rollup/plugin-node-resolve": "^13.0.5",
     "autoprefixer": "^10.4.0",
     "caniuse-lite": "^1.0.30001275",
