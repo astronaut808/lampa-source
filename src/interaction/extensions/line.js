@@ -41,15 +41,22 @@ class Line{
         this.scroll.onScroll = this.attach.bind(this)
     }
 
-    display(num){
-        this.data.filter(p=>{
+    /**
+     * Сохраняем совместимость платформ и аккаунта без региональной фильтрации.
+     */
+    filtered(){
+        return this.data.filter(p=>{
             if(p.platform){
                 let platforms = p.platform.split(',')
 
                 return platforms.find(n=>Platform.is(n))
             }
             else return true
-        }).filter(e=>e.premium ? window.lampa_settings.account_use : true).filter(e=>!this.items.find(f=>f.data==e)).forEach(this.append.bind(this))
+        }).filter(e=>e.premium ? window.lampa_settings.account_use : true)
+    }
+
+    display(num){
+        this.filtered().filter(e=>!this.items.find(f=>f.data==e)).forEach(this.append.bind(this))
     }
 
     visible(){

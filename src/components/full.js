@@ -129,6 +129,7 @@ function component(object){
             }
 
             let fail = (error)=>{
+                if(this.card_destroyed) return
                 let status = error || {}
 
                 Lampa.Listener.send('astronaut:card', {
@@ -143,6 +144,7 @@ function component(object){
             this.html.addClass('layer--wheight')
 
             Api.full(object, (data)=>{
+                if(this.card_destroyed) return
                 if(!data.movie) return fail({empty: true})
 
                 card_data = data
@@ -320,6 +322,12 @@ function component(object){
                 if(this.items.length) this.items[0].emit('groupButtons')
 
                 this.activity.toggle()
+
+                if(Number.isInteger(object.episode_season) && this.items.length){
+                    let season = object.episode_season
+                    delete object.episode_season
+                    this.items[0].emit('watch', {season})
+                }
 
             }, fail, enrich)
         },

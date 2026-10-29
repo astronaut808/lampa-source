@@ -60,6 +60,9 @@ describe('safe startup profile', () => {
         expect(config).toContain('cubTelemetryEnabled: false')
         expect(config).toContain('builtinAdsEnabled: false')
         expect(config).toContain('shotsEnabled: false')
+        expect(config).toContain('seasonalEventsEnabled: false')
+        expect(config).toContain('postPlaybackReactionsEnabled: false')
+        expect(config).toContain('cubWatchHistoryEnabled: true')
         expect(config).toContain('contentFilteringEnabled: false')
         expect(config).toContain('playbackMetricsEnabled: true')
         expect(config).toContain('cardMetricsEnabled: true')
@@ -73,6 +76,9 @@ describe('safe startup profile', () => {
             LAMPA_CUB_TELEMETRY_ENABLED: 'true',
             LAMPA_BUILTIN_ADS_ENABLED: '1',
             LAMPA_SHOTS_ENABLED: 'on',
+            LAMPA_SEASONAL_EVENTS_ENABLED: 'true',
+            LAMPA_POST_PLAYBACK_REACTIONS_ENABLED: 'true',
+            LAMPA_CUB_WATCH_HISTORY_ENABLED: 'false',
             LAMPA_CONTENT_FILTERING_ENABLED: 'true',
             LAMPA_PLAYBACK_METRICS_ENABLED: 'false',
             LAMPA_CARD_METRICS_ENABLED: 'false',
@@ -84,6 +90,9 @@ describe('safe startup profile', () => {
         expect(config).toContain('cubTelemetryEnabled: true')
         expect(config).toContain('builtinAdsEnabled: true')
         expect(config).toContain('shotsEnabled: true')
+        expect(config).toContain('seasonalEventsEnabled: true')
+        expect(config).toContain('postPlaybackReactionsEnabled: true')
+        expect(config).toContain('cubWatchHistoryEnabled: false')
         expect(config).toContain('contentFilteringEnabled: true')
         expect(config).toContain('playbackMetricsEnabled: false')
         expect(config).toContain('cardMetricsEnabled: false')
