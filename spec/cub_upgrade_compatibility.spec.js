@@ -110,12 +110,12 @@ describe('bookmark parser fallback', ()=>{
 })
 
 function device(){
-    const requests=[],node={0:{},addClass(){return this},find(){return this},text:vi.fn()}
+    const requests=[],node={0:{},addClass(){return this},find(){return this},remove(){return this},prepend(){return this},text:vi.fn()}
     const network={timeout:vi.fn(),clear:vi.fn(),silent:(...args)=>requests.push(args),errorCode:e=>e.code}
     const Modal={open:vi.fn(),close:vi.fn()},Storage={set:vi.fn()},window={location:{reload:vi.fn()}}
     node.on=vi.fn(()=>node)
     const module=loadBrowserModule('src/core/account/device.js', {
-        Template:{get:()=>node},Reguest:class{constructor(){return network}},Platform:{tv:()=>false},
+        Template:{get:()=>node},Reguest:class{constructor(){return network}},Platform:{tv:()=>false,is:()=>false},
         Modal,Storage,window,document:{body:{contains:()=>true}},
         Lang:{translate:x=>x},Api:{url:()=> 'https://cub.example/api/'},
         Noty:{show:vi.fn()},Utils:{onceInit:fn=>fn},Date,setTimeout,clearTimeout
