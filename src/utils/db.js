@@ -211,13 +211,17 @@ export default class IndexedDB {
             const objectStore = transaction.objectStore(store_name)
             const addRequest = objectStore.put({ key, value, time: Date.now() })
 
+            // A successful request can still be rolled back by the transaction.
+            transaction.oncomplete = ()=>resolve()
+            transaction.onabort = ()=>reject(transaction.error || new Error('Transaction aborted'))
+            transaction.onerror = ()=>reject(transaction.error || new Error('Transaction failed'))
+
             addRequest.onerror = (event) => {
                 this.log(addRequest.error || 'An error occurred while rewrite data',store_name,key)
 
                 reject(addRequest.error || 'An error occurred while rewrite data')
             }
 
-            addRequest.onsuccess = resolve
         })
     }
 
@@ -236,6 +240,10 @@ export default class IndexedDB {
             const transaction = this.db.transaction([store_name], 'readwrite')
             const objectStore = transaction.objectStore(store_name)
             const deleteRequest = objectStore.delete(key)
+
+            transaction.oncomplete = ()=>resolve()
+            transaction.onabort = ()=>reject(transaction.error || new Error('Transaction aborted'))
+            transaction.onerror = ()=>reject(transaction.error || new Error('Transaction failed'))
     
             deleteRequest.onerror = (event) => {
                 this.log(deleteRequest.error || 'An error occurred while deleting data',store_name,key)
@@ -243,7 +251,6 @@ export default class IndexedDB {
                 reject(deleteRequest.error || 'An error occurred while deleting data')
             }
     
-            deleteRequest.onsuccess = resolve
         })
     }
 
@@ -262,23 +269,25 @@ export default class IndexedDB {
             const objectStore  = transaction.objectStore(store_name)
             const clearRequest = objectStore.clear()
 
+            transaction.oncomplete = ()=>resolve()
+            transaction.onabort = ()=>reject(transaction.error || new Error('Transaction aborted'))
+            transaction.onerror = ()=>reject(transaction.error || new Error('Transaction failed'))
+
             clearRequest.onerror = (event) => {
                 this.log(clearRequest.error || 'An error occurred while clearing the table',store_name)
 
                 reject(clearRequest.error || 'An error occurred while clearing the table')
             }
 
-            clearRequest.onsuccess = ()=>{
-                resolve()
-            }
         })
     }
 
     /**
      * Очистка всех таблиц
+     * @param {string[]} exclude - Таблицы, которые не нужно очищать
      * @returns {Promise<void>}
      */
-    clearAll() {
+    clearAll(exclude = []) {
         return new Promise((resolve, reject) => {
             if (!this.db) {
                 return this.log('Database not open'),reject('Database not open')
@@ -287,7 +296,7 @@ export default class IndexedDB {
             const objectStoreNames = this.db.objectStoreNames
             const tableNames = Array.from(objectStoreNames)
 
-            tableNames.forEach(n=>{
+            tableNames.filter(n=>exclude.indexOf(n) == -1).forEach(n=>{
                 this.clearTable(n)
             })
 
