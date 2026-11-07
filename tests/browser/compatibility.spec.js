@@ -108,6 +108,96 @@ test('disabled telemetry does not prevent explicit CUB history access', async({p
     expect(s.errors).toEqual([])
 })
 
+async function overflowingPreference(page,key,value){
+    await page.evaluate(({key,value})=>{
+        const original=Storage.prototype.setItem
+        Storage.prototype.setItem=function(name,data){
+            if(name===key)throw new DOMException('fixture quota','QuotaExceededError')
+            return original.call(this,name,data)
+        }
+        try{Lampa.Storage.set(key,value)}
+        finally{Storage.prototype.setItem=original}
+    },{key,value})
+    await expect.poll(()=>page.evaluate(key=>Lampa.Cache.getData('storage',key).then(row=>row && row.value),key)).toBe(JSON.stringify(value))
+}
+
+async function reloadedCatalog(page){
+    await page.reload()
+    await expect(page.locator('.card__title').filter({hasText:'Smoke movie'}).first()).toBeVisible()
+}
+
+test('reserved settings survive reload, a local replacement and erase',async({page})=>{
+    const s=await boot(page),key='astronaut_preferences_probe'
+    const saved={source:'fixture',favorite:[101],progress:{seconds:1234},enabled:false}
+    await overflowingPreference(page,key,saved)
+    await reloadedCatalog(page)
+    expect(await page.evaluate(key=>Lampa.Storage.get(key),key)).toEqual(saved)
+    await page.evaluate(key=>Lampa.Storage.set(key,{updated:true}),key)
+    await expect.poll(()=>page.evaluate(key=>Lampa.Cache.getData('storage',key),key)).toBe(null)
+    await reloadedCatalog(page)
+    expect(await page.evaluate(key=>Lampa.Storage.get(key),key)).toEqual({updated:true})
+    await overflowingPreference(page,key,{eraseFromReserve:true})
+    await reloadedCatalog(page)
+    await page.evaluate(key=>Lampa.Storage.erase(key),key)
+    await expect.poll(()=>page.evaluate(key=>Lampa.Cache.getData('storage',key),key)).toBe(null)
+    await reloadedCatalog(page)
+    expect(await page.evaluate(key=>Lampa.Storage.get(key,'missing'),key)).toBe('missing')
+    expect(s.errors).toEqual([])
+    expect(s.requests.filter(url=>forbidden.test(url))).toEqual([])
+})
+
+test('cache cleanup keeps reserved preferences in real IndexedDB',async({page})=>{
+    const s=await boot(page),key='astronaut_preferences_probe'
+    const saved={syncEnabled:true,provider:'fixture'}
+    await overflowingPreference(page,key,saved)
+    await page.evaluate(()=>Lampa.Cache.clearAll(['storage']))
+    await reloadedCatalog(page)
+    expect(await page.evaluate(key=>Lampa.Storage.get(key),key)).toEqual(saved)
+    expect(s.errors).toEqual([])
+})
+
+test('a real IndexedDB transaction abort retains the old local value',async({page})=>{
+    const s=await boot(page),key='astronaut_abort_probe'
+    const outcome=await page.evaluate(async key=>{
+        Lampa.Storage.set(key,'old')
+        const originalSet=Storage.prototype.setItem
+        const db=Lampa.Cache.db,originalTransaction=db.transaction
+        let requestSucceeded=false
+        Storage.prototype.setItem=function(name,value){
+            if(name===key)throw new DOMException('fixture quota','QuotaExceededError')
+            return originalSet.call(this,name,value)
+        }
+        db.transaction=function(...args){
+            const tx=originalTransaction.apply(this,args)
+            if(args[1]==='readwrite' && Array.from(args[0]).includes('storage')){
+                const originalStore=tx.objectStore
+                tx.objectStore=function(name){
+                    const store=originalStore.call(this,name),originalPut=store.put
+                    store.put=function(...values){
+                        const request=originalPut.apply(this,values)
+                        request.addEventListener('success',()=>{requestSucceeded=true;tx.abort()},{once:true})
+                        return request
+                    }
+                    return store
+                }
+            }
+            return tx
+        }
+        try{
+            const restored=await Lampa.Storage.restore(key,'new')
+            return {restored,requestSucceeded,local:localStorage.getItem(key),value:Lampa.Storage.get(key)}
+        }
+        finally{
+            Storage.prototype.setItem=originalSet
+            db.transaction=originalTransaction
+        }
+    },key)
+    expect(outcome).toEqual({restored:false,requestSucceeded:true,local:'old',value:'old'})
+    await reloadedCatalog(page)
+    expect(await page.evaluate(key=>Lampa.Storage.get(key),key)).toBe('old')
+    expect(s.errors).toEqual([])
+})
+
 test.afterEach(async({page},info)=>{
     if(info.status !== info.expectedStatus){
         await info.attach('page-state',{body:Buffer.from(await page.locator('body').innerText()),contentType:'text/plain'})
