@@ -9,7 +9,15 @@ import EpisodeParser from '../utils/episodes_parser'
 import Arrays from '../utils/arrays'
 
 let network  = new Request()
+let gst_check = new Request()
 let gst_work = false
+let gst_address = ''
+let gst_state = 'unknown'
+let gst_pending = null
+let gst_settle = null
+let gst_revision = 0
+let gst_checked = 0
+let gst_timer = null
 
 /**
  * Возвращает url сервера
@@ -207,19 +215,63 @@ function connected(success, fail){
  * @returns {void}
  */
 function gstCheck(){
-    network.silent(url()+'/gst/echo',(json)=>{
-        gst_work = true
-    },(a,c)=>{
-        gst_work = false
-    })
+    const address = url() || ''
+    if(address && address === gst_address){
+        if(gst_pending) return gst_pending
+        if(gst_checked && Date.now() - gst_checked < 30000) return Promise.resolve(gst_work)
+    }
+    const revision = ++gst_revision
+    clearTimeout(gst_timer)
+    gst_check.clear()
+    if(gst_settle) gst_settle(false)
+    gst_settle = null
+    gst_pending = null
+    if(address !== gst_address) gst_work = false
+    gst_address = address
+    gst_state = address ? 'checking' : 'unknown'
+    gst_checked = 0
+    if(!address) return Promise.resolve(false)
+
+    gst_pending = new Promise(resolve=>{gst_settle = resolve})
+    const pending = gst_pending
+    let completed = false
+    const done = available=>{
+        if(completed || revision !== gst_revision) return
+        completed = true
+        clearTimeout(gst_timer)
+        const current = address === (url() || '')
+        gst_work = current && available
+        gst_state = current ? (available ? 'available' : 'unavailable') : 'unknown'
+        gst_checked = current ? Date.now() : 0
+        const settle = gst_settle
+        gst_settle = null
+        gst_pending = null
+        if(settle) settle(gst_work)
+    }
+    gst_check.timeout(5000)
+    gst_timer = setTimeout(()=>{gst_check.clear();done(false)}, 5000)
+    gst_check.silent(address+'/gst/echo', ()=>done(true), ()=>done(false))
+    return pending
+}
+
+/**
+ * Возвращает true, если gstreamer работает на сервере и включен в настройках
+ * @returns {boolean}
+ */
+function gstWork(){
+    return Storage.field('torrserver_gts') && gstExist()
 }
 
 /**
  * Возвращает true, если gstreamer работает на сервере
  * @returns {boolean}
  */
-function gstWork(){
-    return Storage.field('torrserver_gts') && gst_work
+function gstExist(){
+    return gst_address === (url() || '') && gst_work
+}
+
+function gstStatus(){
+    return gst_address === (url() || '') ? gst_state : 'unknown'
 }
 
 /**
@@ -452,7 +504,10 @@ export default {
     parse,
     error,
     cache,
+    gstCheck,
     gstWork,
+    gstExist,
+    gstStatus,
     clearFileName,
     toPlayUrl,
 	viewed,
