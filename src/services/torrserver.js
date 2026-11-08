@@ -6,6 +6,7 @@ import Utils from '../utils/utils'
 import Request from '../utils/reguest'
 import Lang from '../core/lang'
 import Settings from '../interaction/settings/settings'
+import Torserver from '../interaction/torserver'
 
 let torrent_net = new Request()
 
@@ -18,11 +19,15 @@ function init(){
         if (e.name == 'torrserver_url') check(e.name)
         if (e.name == 'torrserver_url_two') check(e.name)
         if (e.name == 'torrserver_use_link') check(e.value == 'one' ? 'torrserver_url' : 'torrserver_url_two')
+        if(['torrserver_url', 'torrserver_url_two', 'torrserver_use_link'].indexOf(e.name) >= 0) Torserver.gstCheck()
     })
 
     Settings.listener.follow('open', function (e){
+        if((e.name == 'main' || e.name == 'server') && Torserver.url()) Torserver.gstCheck()
         if(e.name == 'server'){
             check(Storage.field('torrserver_use_link') == 'one' ? 'torrserver_url' : 'torrserver_url_two')
+
+            // Keep the saved setting visible while a capability probe is pending or the server is offline.
         }
         else torrent_net.clear() 
     })

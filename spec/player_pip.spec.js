@@ -27,6 +27,7 @@ function node(){
         result[name] = vi.fn(()=>result)
     }
     result.find = ()=>node()
+    result.hasClass = vi.fn(()=>false)
     result.append = vi.fn(child=>{result.children.push(child);child.attached = true;return result})
     result.empty = vi.fn(()=>{result.children = [];return result})
     result.detach = vi.fn(()=>{result.attached = false;return result})
@@ -34,9 +35,10 @@ function node(){
     return result
 }
 
-function setup({engine = 'native', normalization = false} = {}){
+function setup({engine = 'native', normalization = false, gst = false, deferredHls = false} = {}){
     const root = node(), videoRoot = node(), display = node(), body = node()
-    videoRoot.find = selector=>selector === '.player-video__display' ? display : node()
+    const subtitlesRoot = node()
+    videoRoot.find = selector=>selector === '.player-video__display' ? display : selector === '.player-video__subtitles' ? subtitlesRoot : node()
     const videos = [], reports = [], settings = {player_normalization: normalization}
     const document = {
         hidden: false, pictureInPictureElement: null,
@@ -76,6 +78,7 @@ function setup({engine = 'native', normalization = false} = {}){
         if(typeof value !== 'string' || !value.startsWith('<video')) return node()
         const events = {}
         const video = {
+            tagName:'VIDEO',
             currentTime: 0, duration: 100, paused: true, ended: false, seeking: false,
             readyState: 4, networkState: 1, videoWidth: 1920, videoHeight: 1080,
             buffered: {length: 1, start: ()=>0, end: ()=>20}, textTracks: [], audioTracks: [],
@@ -91,29 +94,46 @@ function setup({engine = 'native', normalization = false} = {}){
     }
     globals.$ = $
     const hls = {
-        destroy: vi.fn(()=>engine === 'hls'), destroyParser: vi.fn(),
+        destroy: vi.fn(()=>engine === 'hls'), destroyParser: vi.fn(), setupAudioTracks: ()=>null, buildLevels: ()=>null,
         shouldUseProgram: ()=>({use_program: engine === 'hls', hls_native: true}),
-        createProgram: vi.fn((src, video, data, callbacks)=>{video.src = src;callbacks.play()}),
+        createProgram: vi.fn((src, video, data, callbacks)=>{video.src = src;if(!deferredHls)callbacks.play()}),
+        createParser: vi.fn((src,data,callbacks)=>callbacks.load(src)),
         audioTracks: ()=>null, currentLevel: ()=>undefined
     }
     const dash = {
-        destroy: vi.fn(()=>engine === 'dash'), audioTracks: ()=>null, currentLevel: ()=>undefined,
+        destroy: vi.fn(()=>engine === 'dash'), audioTracks: ()=>null, currentLevel: ()=>undefined, setupAudioTracks: ()=>null, buildLevels: ()=>null,
         create: vi.fn((src, video)=>{video.src = src})
     }
-    const webos = {setup: vi.fn(), destroy: vi.fn(), audioTracks: ()=>null}
+    const webos = {setup: vi.fn(), destroy: vi.fn(), audioTracks: ()=>null, handleLoaded: ()=>false}
     const Video = loadModule('../src/interaction/player/video.js', globals, {
         Template, Storage, Controller, Platform, TV, Player, Tube: tube,
-        Subscribe, Normalization, HlsStream: hls, DashStream: dash, WebOSManager: webos
+        Subscribe, Normalization, HlsStream: hls, DashStream: dash, WebOSManager: webos,
+        Arrays: {isArray:Array.isArray}, Utils: {isPWA:()=>false}, preferredSubtitle: ()=>null,
+        Segments:{adjust:vi.fn(),update:vi.fn(),listener:Subscribe()}
     })
     // Scaling/speed are unrelated platform presentation boundaries.
     Video.size = vi.fn(); Video.speed = vi.fn()
     const Preroll = {show: (data, callback)=>callback()}
     const Timeline = {init: vi.fn(), destroy: vi.fn(), needToContinue: vi.fn(), resetContinue: vi.fn()}
+    const gstRequests = []
+    let gstTracks
+    function Reguest(){
+        this.clear = vi.fn()
+        this.timeout = vi.fn()
+        this.silent = (url,success,fail)=>gstRequests.push({url,success,fail})
+    }
+    const GstAudio = gst ? loadModule('../src/interaction/player/gst_audio.js', globals, {
+        Player,Video,Reguest,Platform,Storage,Panel:{setTracks: tracks=>{gstTracks=tracks}},
+        Torserver:{url:()=> 'http://test.invalid',toPlayUrl:url=>url}, SubsTorserver:{fileIndex:()=>0},
+        parseGst: json=>json, Lang:{translate: key=>key}, languageName: key=>key,channelLayout:()=>''
+    }) : {init:vi.fn(),isActive:()=>false}
     Object.assign(Player, loadModule('../src/interaction/player.js', globals, {
         Video, Template, Storage, Controller, Platform, TV, Playlist, Preroll, Timeline,
         Info: {init: vi.fn(), render: ()=>node(), loading: vi.fn()},
+        PlaybackInfo: {init: vi.fn(), render: ()=>node(), isOpen: ()=>false},
+        GstAudio,
         Subscribe, Background: {theme: vi.fn()}, Select: {opened: ()=>false},
-        Disclaimer: {init: vi.fn(), needs: ()=>false}, Torserver: {toPlayUrl: url=>url},
+        Disclaimer: {init: vi.fn(), needs: ()=>false}, Torserver: {toPlayUrl: url=>url,gstWork:()=>gst},
         Arrays: {isArray: Array.isArray, getKeys: Object.keys},
         InfusePlayer: {normalizePlayData: vi.fn(), resolveUrl: ()=> 'infuse://play', isTorrentStream: ()=>false}
     }))
@@ -130,14 +150,147 @@ function setup({engine = 'native', normalization = false} = {}){
     const second = {url: 'https://test.invalid/two.' + extension, title: 'Episode two'}
     function start(){Player.play(first);Video.video().emit('playing')}
     function next(){Playlist.listener.send('select', {item: second})}
-    return {Player, Video, Playlist, document, root, display, body, videos, reports, Preroll, Platform,
+    return {Player, Video, Playlist, document, root, display, body, videos, reports, Preroll, Platform, subtitlesRoot,
+        gstRequests, get gstTracks(){return gstTracks},
         hls, dash, tube, settings, globals, normalizationInstances, start, next, second}
 }
 
 beforeEach(()=>vi.useFakeTimers())
 afterEach(()=>{vi.clearAllTimers();vi.useRealTimers()})
 
+describe('TorrServer audio source transitions with real Player and Video', ()=>{
+    function playing(options={}){
+        const s=setup({gst:true,...options})
+        const data={torrent_hash:'fixture',url:'http://test.invalid/gst/fixture/master.m3u8?index=0&audio=0'}
+        s.Player.play(data)
+        s.Video.video().duration=1000
+        s.Video.video().currentTime=431
+        s.Video.video().emit('playing')
+        s.gstRequests[0].success({tracks:[0,1,2].map(i=>({type:'audio',codec:'AAC',lang:'en',title:String(i)}))})
+        return s
+    }
+    it.each(['native','hls'])('keeps the PiP video and position when changing audio: %s',engine=>{
+        const s=playing({engine}),video=s.Video.video()
+        s.document.pictureInPictureElement=video
+        s.gstTracks[1].enabled=true
+        expect(s.Video.video()).toBe(video)
+        expect(s.videos).toHaveLength(1)
+        expect(s.document.exitPictureInPicture).not.toHaveBeenCalled()
+        video.currentTime=0;video.emit('loadeddata')
+        expect(video.currentTime).toBe(431)
+        s.Player.close()
+        expect(s.document.exitPictureInPicture).toHaveBeenCalledTimes(1)
+    })
+    it.each(['native','hls'])('does not autoplay a paused source or pause an ordinary seek: %s',engine=>{
+        const s=playing({engine}),video=s.Video.video()
+        s.Video.pause();video.play.mockClear()
+        s.gstTracks[1].enabled=true
+        video.currentTime=0;video.emit('loadeddata')
+        expect(video.currentTime).toBe(431)
+        expect(video.paused).toBe(true)
+        expect(video.play).not.toHaveBeenCalled()
+        s.Video.playpause()
+        expect(video.paused).toBe(false)
+        s.Video.to(450)
+        expect(video.currentTime).toBe(450)
+        expect(video.paused).toBe(false)
+    })
+    it('keeps the original target across rapid selections and invalidates the old seek',()=>{
+        const s=playing(),video=s.Video.video()
+        s.gstTracks[1].enabled=true
+        video.currentTime=0
+        s.gstTracks[2].enabled=true
+        video.emit('loadeddata')
+        expect(video.currentTime).toBe(431)
+        expect(video.src).toContain('audio=2')
+    })
+    it('does not seek or restart a closed player from a late loadeddata',()=>{
+        const s=playing(),video=s.Video.video()
+        s.gstTracks[1].enabled=true
+        s.Player.close();video.currentTime=0;video.play.mockClear()
+        video.emit('loadeddata')
+        expect(video.currentTime).toBe(0)
+        expect(video.play).not.toHaveBeenCalled()
+    })
+    it('ignores a probe result from the previous episode',()=>{
+        const s=setup({gst:true})
+        s.Player.play({torrent_hash:'fixture',url:'http://test.invalid/gst/fixture/master.m3u8?index=0'})
+        const old=s.gstRequests[0]
+        s.Player.play({url:'http://test.invalid/movie.mp4'})
+        old.success({tracks:[{type:'audio'},{type:'audio'}]})
+        expect(s.gstTracks).toBeUndefined()
+    })
+    it('preserves an explicitly disabled subtitle despite subtitles_start',()=>{
+        const s=playing(),video=s.Video.video()
+        video.textTracks=[{index:0,mode:'disabled',selected:false}]
+        s.settings.subtitles_start=true
+        s.subtitlesRoot.hasClass.mockReturnValue(true)
+        s.gstTracks[1].enabled=true
+        video.emit('loadeddata')
+        expect(video.textTracks[0].mode).toBe('disabled')
+        expect(video.textTracks[0].selected).toBe(false)
+    })
+    it('preserves the selected subtitle and its native bindings',()=>{
+        const s=playing(),video=s.Video.video()
+        video.textTracks=[{index:0,mode:'disabled'},{index:1,mode:'showing',selected:true}]
+        const listeners=video.addEventListener.mock.calls.length
+        s.gstTracks[1].enabled=true
+        video.textTracks[1].mode='disabled';video.emit('loadeddata')
+        expect(video.textTracks[1].mode).toBe('showing')
+        expect(video.addEventListener).toHaveBeenCalledTimes(listeners)
+    })
+    it('accepts a user pause while the replacement is loading',()=>{
+        const s=playing(),video=s.Video.video()
+        s.gstTracks[1].enabled=true;s.Video.pause();video.emit('loadeddata')
+        expect(video.paused).toBe(true)
+    })
+    it('accepts a user play command while a paused replacement is loading',()=>{
+        const s=playing(),video=s.Video.video()
+        s.Video.pause();s.gstTracks[1].enabled=true
+        s.Video.play('toggle');video.emit('loadeddata')
+        expect(video.paused).toBe(false)
+    })
+    it('cancels a pending seek after a fatal source error',()=>{
+        const s=playing(),video=s.Video.video()
+        s.gstTracks[1].enabled=true
+        s.Video.listener.send('error',{fatal:true,error:'fixture'})
+        video.currentTime=0;video.emit('loadeddata')
+        expect(video.currentTime).toBe(0)
+    })
+    it.each(['tizen','orsay'])('does not replace the native wrapper audio path: %s',platform=>{
+        const Player={listener:Subscribe()},silent=vi.fn()
+        const module=loadModule('../src/interaction/player/gst_audio.js',{}, {
+            Player,Video:{listener:Subscribe()},Reguest:class {clear(){} silent=silent},
+            Torserver:{url:()=> 'http://test.invalid'},
+            Platform:{is:name=>name===platform},Storage:{field:()=>platform}
+        })
+        module.init()
+        Player.listener.send('start',{torrent_hash:'fixture',url:'http://test.invalid/gst/hash/master.m3u8?index=0'})
+        expect(silent).not.toHaveBeenCalled()
+        expect(module.isActive()).toBe(false)
+    })
+})
+
 describe('PiP episode transitions', ()=>{
+    it('starts a deferred HLS manifest after the synchronous PiP transition token is released',()=>{
+        const s=setup({engine:'hls',deferredHls:true})
+        s.start();const video=s.Video.video()
+        s.hls.createProgram.mock.calls[0][3].play()
+        s.document.pictureInPictureElement=video
+        s.next();video.play.mockClear()
+        s.hls.createProgram.mock.calls[1][3].play()
+        expect(video.play).toHaveBeenCalledTimes(1)
+        expect(s.Video.video()).toBe(video)
+    })
+    it('ignores an old HLS manifest callback after closing or replacing its source',()=>{
+        const s=setup({engine:'hls',deferredHls:true})
+        s.start();const video=s.Video.video(),old=s.hls.createProgram.mock.calls[0][3]
+        s.next();video.play.mockClear();old.play()
+        expect(video.play).not.toHaveBeenCalled()
+        const current=s.hls.createProgram.mock.calls[1][3]
+        s.Player.close();const latest=s.Video.video();latest.play.mockClear();current.play()
+        expect(latest.play).not.toHaveBeenCalled()
+    })
     it.each(['native', 'hls', 'dash'])('retains video/DOM and rebuilds only the stream engine: %s', engine=>{
         const s = setup({engine})
         s.start()

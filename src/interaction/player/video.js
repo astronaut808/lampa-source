@@ -37,6 +37,7 @@ let rewind_force    = 0
 let video
 let retainedPipVideo = false
 let sourceGeneration = 0
+let sourcePlayback = null
 let wait
 let need_scale
 let need_scale_last
@@ -263,6 +264,7 @@ function bind(){
     //получены первые данные
     video.addEventListener('loadeddata', function (e) {
         Segments.adjust(video.duration)
+        if(sourcePlayback && sourcePlayback.paused) loader(false)
 
         listener.send('videosize',{width: video.videoWidth, height: video.videoHeight})
         listener.send('loadeddata',{duration: video.duration, current: video.currentTime})
@@ -481,7 +483,17 @@ function loaded(){
     if(subs.length){
         subs = convertToArray(subs)
 
-        if(typeof params.sub !== 'undefined' && subs[params.sub]){
+        if(sourcePlayback && sourcePlayback.subtitlesVisible === false){
+            subs.forEach(e=>{e.mode = 'disabled'; e.selected = false})
+            subsview(false)
+        }
+        else if(sourcePlayback && sourcePlayback.subtitleIndex >= 0 && subs[sourcePlayback.subtitleIndex]){
+            subs.forEach(e=>{e.mode = 'disabled'; e.selected = false})
+            subs[sourcePlayback.subtitleIndex].mode = 'showing'
+            subs[sourcePlayback.subtitleIndex].selected = true
+            subsview(true)
+        }
+        else if(typeof params.sub !== 'undefined' && subs[params.sub]){
             subs.forEach(e=>{e.mode = 'disabled'; e.selected = false})
 
             subs[params.sub].mode     = 'showing'
@@ -586,11 +598,14 @@ function loader(status){
  * @param {string} src - ссылка на видео
  * @param {boolean} change_quality - указывает что меняем качество, нужно для hlsjs, чтобы не создавать парсер заново
  * @param {function} isCurrent - проверка отмены синхронного перехода между сериями в PiP
+ * @param {object} playbackState - необязательное сохранение паузы при замене источника
  */
- function url(src, change_quality, isCurrent){
+ function url(src, change_quality, isCurrent, playbackState){
     const current = ()=>!isCurrent || isCurrent()
     if(!current()) return
     sourceGeneration++
+    const generation = sourceGeneration
+    sourcePlayback = playbackState ? {...playbackState} : null
 
     loader(true)
 
@@ -636,7 +651,8 @@ function loader(status){
                 diagnostic('engine', {engine: 'hls.js', version: Hls.version || ''})
                 if(!current()) return
                 HlsStream.createProgram(src, video, Player.playdata(), {
-                    play,
+                    // The third argument guards only synchronous PiP launch. It expires after url() returns.
+                    play: ()=>{if(generation === sourceGeneration) play('source_load')},
                     load,
                     error: (msg, fatal) => listener.send('error', {error: msg, fatal}),
                     subtitles: (subs) => listener.send('subs', {subs}),
@@ -699,6 +715,8 @@ function load(src){
  */
 function play(reason) {
     try {
+        if(sourcePlayback && sourcePlayback.paused && (reason === 'source_load' || reason === 'seek')) return
+        if(sourcePlayback) sourcePlayback.paused = false
         const generation = sourceGeneration
         diagnostic('command', {action: 'play', reason: reason || 'player_api'})
         if(generation !== sourceGeneration) return
@@ -731,6 +749,7 @@ function play(reason) {
  */
 function pause(reason){
     try {
+        if(sourcePlayback && reason !== 'seek') sourcePlayback.paused = true
         diagnostic('command', {action: 'pause', reason: reason || 'player_api'})
 
         let promise = video.pause()
@@ -935,7 +954,8 @@ function volume(vol){
 
     video.volume = vol
 
-    Storage.set('player_volume', vol)
+    // строкой: число 0 в кеше Storage.get считает пустым и отдает дефолт '1'
+    Storage.set('player_volume', String(vol))
 }
 
 
